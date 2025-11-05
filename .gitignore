@@ -12,8 +12,19 @@ wheels/
 # Environment variables
 .env
 
-# Output files
-*.mp3
+# Output directory (organized by date and video title)
+output/
+
+# Old output files (if any remain)
 *_transcript.txt
 *_report.md
 *_report.pdf
+
+# Temporary files
+tmp*.mp3
+audio_*.mp3
+*.mp3
+
+# Log files
+*.log
+yt-transcribe.log

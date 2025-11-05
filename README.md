@@ -8,6 +8,10 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 - Transcribe audio using faster-whisper
 - Generate comprehensive reports with OpenAI (Summary, Key Ideas, Why It Matters)
 - Export reports as both Markdown and PDF
+- **Input validation** - Validates URLs, model names, and API keys before processing
+- **Organized outputs** - Files organized by date and video title
+- **Detailed logging** - Debug mode with comprehensive logs per video
+- **Error handling** - Clear, actionable error messages
 
 ## Installation
 
@@ -63,10 +67,12 @@ ytt <youtube-url>
 
 ### Options
 
-- `--output-dir`, `-o`: Directory to save output files (default: current directory)
+- `--output-dir`, `-o`: Base directory for output files (default: `./output`)
 - `--model`, `-m`: Whisper model size - `tiny`, `base`, `small`, `medium`, `large` (default: `base`)
 - `--device`, `-d`: Device to use - `cpu` or `cuda` (default: `cpu`)
 - `--openai-model`: OpenAI model to use (default: `gpt-4`)
+- `--debug`: Enable debug logging (shows detailed processing info)
+- `--keep-audio`: Keep temporary audio file after processing (for debugging)
 
 ### Examples
 
@@ -89,13 +95,30 @@ ytt https://www.youtube.com/watch?v=VIDEO_ID --openai-model gpt-4-turbo
 
 ## Output Files
 
-For each video, the tool generates:
+For each video, the tool creates an organized folder structure:
 
-1. **Transcript** (`*_transcript.txt`): Raw transcription of the video audio
-2. **Report (Markdown)** (`*_report.md`): AI-generated report in Markdown format
-3. **Report (PDF)** (`*_report.pdf`): Same report formatted as a PDF
+```
+output/
+└── YYYY-MM-DD/              # Date of processing
+    └── Video_Title/         # Sanitized video title
+        ├── transcript.txt   # Raw transcription
+        ├── report.md        # AI-generated report (Markdown)
+        ├── report.pdf       # Report as PDF
+        └── yt-transcribe.log # Processing log
+```
 
-All files are timestamped and named based on the video URL.
+**Example:**
+```
+output/
+└── 2024-11-05/
+    └── The_Apostles_Creed/
+        ├── transcript.txt
+        ├── report.md
+        ├── report.pdf
+        └── yt-transcribe.log
+```
+
+All files are organized by date and video title for easy navigation.
 
 ## Requirements
 
@@ -111,6 +134,12 @@ All files are timestamped and named based on the video URL.
 - The first time you run the tool, faster-whisper will download the model files (this may take a few minutes)
 - Larger Whisper models provide better accuracy but are slower
 - GPU acceleration (CUDA) requires appropriate hardware and drivers
+
+## Documentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and change log
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Development documentation, architecture, and guidelines
+- **[docs/](docs/)** - Additional developer documentation
 
 ## Troubleshooting
 
