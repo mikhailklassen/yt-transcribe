@@ -231,8 +231,7 @@ output/
 ## Documentation
 
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and change log
-- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Development documentation, architecture, and guidelines
-- **[docs/](docs/)** - Additional developer documentation
+- **[CLAUDE.md](CLAUDE.md)** - Development documentation, architecture, and guidelines for contributors
 
 ## Troubleshooting
 
