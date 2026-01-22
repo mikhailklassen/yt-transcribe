@@ -63,41 +63,90 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 
 ### Transcribe a YouTube Video
 
+Download and transcribe a YouTube video to text only (no AI summary):
+
 ```bash
-ytt <youtube-url>
+ytt transcribe https://youtube.com/watch?v=VIDEO_ID
 ```
+
+This creates: `output/YYYY-MM-DD/Video_Title/transcript.txt`
+
+**No OpenAI API key required** for transcription.
 
 #### Options
 
 - `--output-dir`, `-o`: Base directory for output files (default: `./output`)
 - `--model`, `-m`: Whisper model size - `tiny`, `base`, `small`, `medium`, `large` (default: `base`)
 - `--device`, `-d`: Device to use - `cpu` or `cuda` (default: `cpu`)
-- `--openai-model`: OpenAI model to use (default: `gpt-4`)
-- `--debug`: Enable debug logging (shows detailed processing info)
 - `--keep-audio`: Keep temporary audio file after processing (for debugging)
+- `--debug`: Enable debug logging (shows detailed processing info)
 
 #### Examples
 
 ```bash
-# Basic usage
-ytt https://www.youtube.com/watch?v=VIDEO_ID
+# Basic transcription
+ytt transcribe https://www.youtube.com/watch?v=VIDEO_ID
 
 # Use a larger model for better accuracy
-ytt https://www.youtube.com/watch?v=VIDEO_ID --model large
+ytt transcribe https://www.youtube.com/watch?v=VIDEO_ID --model large
 
 # Use GPU acceleration (if available)
-ytt https://www.youtube.com/watch?v=VIDEO_ID --device cuda
+ytt transcribe https://www.youtube.com/watch?v=VIDEO_ID --device cuda
 
 # Specify output directory
-ytt https://www.youtube.com/watch?v=VIDEO_ID -o ./reports
+ytt transcribe https://www.youtube.com/watch?v=VIDEO_ID -o ./reports
+```
+
+### Generate AI Summary
+
+Generate an AI-powered summary report (transcribes first if needed):
+
+```bash
+ytt summarize https://youtube.com/watch?v=VIDEO_ID
+```
+
+**Intelligent transcript reuse:** If a transcript already exists in the output directory, it will be reused without re-transcribing. Otherwise, the video will be downloaded and transcribed first.
+
+This creates:
+- `transcript.txt` (if not already present)
+- `report.md` (AI-generated summary)
+- `report.pdf` (PDF version)
+- `yt-transcribe.log`
+
+**Requires** `OPENAI_API_KEY` environment variable.
+
+#### Options
+
+- `--output-dir`, `-o`: Base directory for output files (default: `./output`)
+- `--model`, `-m`: Whisper model size (default: `base`) - only used if transcription is needed
+- `--device`, `-d`: Device: `cpu` or `cuda` (default: `cpu`) - only used if transcription is needed
+- `--keep-audio`: Keep audio file - only used if transcription is needed
+- `--openai-model`: OpenAI model to use (default: `gpt-5-mini`)
+- `--prompt`: Custom summary prompt (file path or string)
+- `--debug`: Enable debug logging
+
+#### Examples
+
+```bash
+# Basic summarization
+ytt summarize https://www.youtube.com/watch?v=VIDEO_ID
 
 # Use a different OpenAI model
-ytt https://www.youtube.com/watch?v=VIDEO_ID --openai-model gpt-5-mini
+ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --openai-model gpt-5
+
+# With custom prompt from file
+ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --prompt prompt.txt
+
+# With custom prompt as string
+ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --prompt "Summarize this video focusing on technical details"
+
+# Use larger Whisper model if transcription is needed
+ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --model large
 ```
 
 ### Generate Report from Existing Transcript
 
-If you already have a transcript file and want to generate (or regenerate) the report:
+Generate a report from an arbitrary transcript file:
 
 ```bash
 ytt report <path-to-transcript.txt>
@@ -107,10 +156,12 @@ This is useful when you:
 - Want to regenerate a report with different parameters
 - Have a transcript from a previous run and want to create a report without re-transcribing
 - Want to try different OpenAI models to see which produces better results
+- Have a transcript file from another source
 
 #### Options
 
 - `--openai-model`: OpenAI model to use (default: `gpt-5-mini`)
+- `--prompt`: Custom summary prompt (file path or string)
 - `--debug`: Enable debug logging
 
 #### Examples
@@ -122,6 +173,9 @@ ytt report output/2025-11-05/Video_Title/transcript.txt
 # Use a different OpenAI model
 ytt report output/2025-11-05/Video_Title/transcript.txt --openai-model gpt-5
 
+# With custom prompt
+ytt report output/2025-11-05/Video_Title/transcript.txt --prompt "Focus on key takeaways"
+
 # With debug logging
 ytt report output/2025-11-05/Video_Title/transcript.txt --debug
 ```
@@ -130,17 +184,23 @@ The report files (`report.md` and `report.pdf`) will be saved in the same direct
 
 ## Output Files
 
-For each video, the tool creates an organized folder structure:
+Files are organized by date and video title:
 
 ```
 output/
 └── YYYY-MM-DD/              # Date of processing
     └── Video_Title/         # Sanitized video title
         ├── transcript.txt   # Raw transcription
-        ├── report.md        # AI-generated report (Markdown)
-        ├── report.pdf       # Report as PDF
+        ├── report.md        # AI-generated report (Markdown) - only with summarize
+        ├── report.pdf       # Report as PDF - only with summarize
         └── yt-transcribe.log # Processing log
 ```
+
+**What each command creates:**
+
+- `ytt transcribe URL`: Creates `transcript.txt` only
+- `ytt summarize URL`: Creates `transcript.txt` (if needed), `report.md`, and `report.pdf`
+- `ytt report FILE`: Creates `report.md` and `report.pdf` in the same directory as the transcript file
 
 **Example:**
 ```
@@ -152,8 +212,6 @@ output/
         ├── report.pdf
         └── yt-transcribe.log
 ```
-
-All files are organized by date and video title for easy navigation.
 
 ## Requirements
 

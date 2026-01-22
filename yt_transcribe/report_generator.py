@@ -8,30 +8,40 @@ logger = logging.getLogger(__name__)
 # Default prompt for report generation
 DEFAULT_PROMPT = """You are an expert analyst who creates comprehensive, detailed reports from video transcripts.
 
-Create a report with the following sections. In each section, balance depth and breadth. The report should be comprehensive and detailed, but not too verbose. Use Markdown formatting.
+First, assess the content type and scope of this video. Adapt your report structure accordingly:
+- For general/educational content: focus on key ideas and broader implications
+- For tutorials/how-tos: focus on steps, procedures, and practical details
+- For technical/specialized content: focus on accuracy and technical details
+- For niche topics: prioritize faithful summarization over adding external context
+
+Create a report with the following sections:
 
 # Title
-Provide a title for the report. This should be a concise and clear title that captures the main content of the video. It could be the title of the video. 
+Provide a title for the report. This should be a concise and clear title that captures the main content of the video. It could be the title of the video.
 
 ## Summary
-Provide a summary of the video content. Include specific points, examples, and key information discussed. This section should be concise, and no more than 4 paragraphs in length,
-like an executive summary or the abstract of a research paper. It should be a concise and clear overview of the video content, and should be able to stand alone as a summary of the video.
+Provide a concise summary of the video content (typically 3-4 paragraphs, but may be longer if needed for completeness). Include specific points, examples, and key information discussed. This should be like an executive summary that can stand alone as a summary of the video.
 
 ## Key Ideas
-In this section, go into a bit more depth than the summary, parsing out the main points of the video. If the video is making a persuasive argument, the bullet
-points of this section would recapitulate the argument, but in a more detailed and structured way. If the video is presenting information, the bullet
-points of this section would be a list of the key points of the information presented. Note any important nuances, qualifications, or exceptions discussed. If
-there are important illustrative examples, summarize them as a bullet point in this section. Do not create subsections within this section, or bullets within bullets. Do not 
-use bullets as "titles" for subsections. Keep it to less than 8 bullets in this section. Focus on the most important ideas or arguments presented in the video.
-You may bold or italicize the most important words or phrases within each bullet point, but never the entire bullet point itself.
+Parse out the main points in detail (typically 5-10 bullets, more if the content is dense or technical):
+- If the video makes an argument, recapitulate the argument structure
+- If the video presents information, list the key points
+- If the video is a tutorial, highlight the main steps/concepts
+- Include important nuances, qualifications, or examples
+- Keep bullets concise - no sub-bullets or nested sections
+- You may bold/italicize key terms, but never entire bullets
 
-## Why It Matters
-In this section, go beyond the key ideas or arguments presented in the video and connect them to broader ideas, contexts, and implications that are genuinely relevant to the topic.
-For example, if there is some important historical context that wasn't mentioned in the video, or some important real-world applications or consequences of the ideas presented,
-summarize them as a bullet point in this section. Group relevant points together into subsections (e.g. "### Historical Context", "### Geopolitical Implications", etc.). You don't
-need to use exactly those categories, but you should use a natural grouping of points.
+## [Adaptive Third Section]
+The title and content of this section should match the content type:
 
-Format your response as Markdown. You may use markdown formatting to make the report more readable, such as bolding, italicizing, and bullet points. Avoid the use of emojis.
+- For general topics with broader relevance: Use "Why It Matters" and discuss implications, historical context, real-world applications
+- For tutorials/how-tos: Use "Implementation Notes" or "Key Takeaways" and focus on practical details, common pitfalls, important caveats
+- For technical/specialized content: Use "Additional Context" or "Technical Details" and expand on complex concepts
+- For highly niche content where you lack broader context: Skip this section OR keep it brief and domain-specific
+
+**Important:** Only include information supported by the transcript. Do not hallucinate broader context or implications if you're uncertain. For niche topics, accuracy matters more than comprehensiveness.
+
+Format as Markdown. Use formatting (bold, italic, bullets) for readability. Avoid emojis.
 """
 
 # Model context window limits (total tokens: input + output)

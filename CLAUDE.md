@@ -12,16 +12,22 @@ yt-transcribe is a CLI tool that downloads YouTube videos, transcribes audio usi
 # Install dependencies
 uv sync
 
-# Run the tool (transcribe a video)
-ytt <youtube-url>
-ytt <youtube-url> --model large --device cuda --debug
+# Transcribe only (no OpenAI key required)
+ytt transcribe <youtube-url>
+ytt transcribe <youtube-url> --model large --device cuda --debug
+
+# Transcribe + generate AI summary (requires OpenAI key)
+ytt summarize <youtube-url>
+ytt summarize <youtube-url> --openai-model gpt-5
+ytt summarize <youtube-url> --prompt "custom prompt here"
 
 # Generate report from existing transcript
 ytt report <path-to-transcript.txt>
 ytt report <path-to-transcript.txt> --openai-model gpt-5
 
 # Debug mode (preserves audio files, verbose logging)
-ytt <url> --debug --keep-audio
+ytt transcribe <url> --debug --keep-audio
+ytt summarize <url> --debug --keep-audio
 ```
 
 No automated tests exist yet. Manual testing with real YouTube videos is the current approach.
@@ -30,7 +36,7 @@ No automated tests exist yet. Manual testing with real YouTube videos is the cur
 
 ```
 yt_transcribe/
-├── cli.py              # Click CLI with command groups (ytt, ytt report)
+├── cli.py              # Click CLI with command groups (transcribe, summarize, report)
 ├── downloader.py       # YouTube audio download via yt-dlp
 ├── transcriber.py      # Audio transcription via faster-whisper
 ├── report_generator.py # AI report generation via OpenAI
@@ -38,7 +44,10 @@ yt_transcribe/
 └── validation.py       # Input validation (URLs, models, API keys)
 ```
 
-**CLI structure:** Uses Click command groups. The default command (`ytt <url>`) runs the full workflow (download → transcribe → report). The `report` subcommand generates reports from existing transcripts.
+**CLI structure:** Uses Click command groups with three commands:
+- `ytt transcribe URL` - Download and transcribe only (creates transcript.txt)
+- `ytt summarize URL` - Transcribe (if needed) + generate AI summary (creates transcript.txt, report.md, report.pdf)
+- `ytt report FILE` - Generate report from existing transcript file
 
 **Output organization:** Files saved to `output/YYYY-MM-DD/Video_Title/` containing transcript.txt, report.md, report.pdf, and yt-transcribe.log.
 
