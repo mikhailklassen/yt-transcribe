@@ -1,3 +1,20 @@
+# macOS
+.DS_Store
+
+# yt-transcribe specific
+# Output directory (organized by date and video title)
+output/
+
+# Old output files (if any remain)
+*_transcript.txt
+*_report.md
+*_report.pdf
+
+# Temporary audio files
+tmp*.mp3
+audio_*.mp3
+*.mp3
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

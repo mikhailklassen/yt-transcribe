@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yt-transcribe"
+version = "0.1.0"
+description = "YouTube video transcription and AI-powered report generation tool"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "yt-dlp>=2025.10.22",
+    "faster-whisper>=1.0.0",
+    "openai>=1.0.0",
+    "click>=8.1.0",
+    "python-dotenv>=1.0.0",
+    "markdown>=3.5.0",
+    "weasyprint>=60.0",
+    "pydub>=0.25.0",
+]
+
+[project.scripts]
+ytt = "yt_transcribe.cli:cli"
+
+[tool.setuptools]
+packages = ["yt_transcribe"]
