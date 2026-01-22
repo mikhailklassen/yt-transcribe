@@ -1,0 +1,65 @@
+# Cursor Rules for yt-transcribe
+
+## Documentation Management
+
+### Critical Rule: No Top-Level Markdown Files
+
+**DO NOT create new markdown files in the project root directory.**
+
+- All documentation belongs in the `docs/` folder
+- User documentation goes in `README.md` (root)
+- Change tracking goes in `CHANGELOG.md` (root)
+- Everything else goes in `docs/`
+
+### Prefer Updating Existing Files
+
+When documenting changes:
+1. Check if content belongs in an existing file first
+2. Update `CHANGELOG.md` for all changes
+3. Update `README.md` for user-facing changes
+4. Update `docs/DEVELOPMENT.md` for architecture changes
+5. Update `docs/USAGE.md` for usage examples
+
+### Use TODO Lists, Not Markdown Files
+
+- Use the todo tool for temporary task tracking
+- Do NOT create `ACTION_PLAN.md`, `CHECKLIST.md`, or similar files
+- Do NOT create `IMPLEMENTATION_SUMMARY.md` or `CHANGES_IMPLEMENTED.md`
+
+## Code Style
+
+- Use type hints for all functions
+- Use `pathlib.Path` for file operations
+- Use logging instead of print statements
+- Follow existing code patterns and structure
+- Add docstrings to all public functions
+
+## Project Structure
+
+- Source code: `yt_transcribe/`
+- Documentation: `docs/`
+- Output files: `output/`
+- Configuration: `pyproject.toml`
+
+## Documentation Files
+
+**Root:**
+- `README.md` - User documentation
+- `CHANGELOG.md` - Version history
+
+**docs/:**
+- `README.md` - Documentation index
+- `DEVELOPMENT.md` - Architecture and development notes
+- `USAGE.md` - Usage examples
+- `HISTORICAL_REVIEW.md` - Historical analysis
+
+## Before Creating Files
+
+Ask yourself:
+1. Is this a source code file? → Create in appropriate package
+2. Is this documentation? → Update existing docs files
+3. Is this temporary? → Use TODO lists, delete when done
+4. Is this configuration? → Create if necessary
+
+**When in doubt, update existing files rather than creating new ones.**
+

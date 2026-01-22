@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **New `report` command** to generate reports from existing transcript files
+  - Allows regenerating reports without re-transcribing
+  - Saves report in the same directory as the transcript
+  - Supports all OpenAI model options
 - Input validation for YouTube URLs, model names, and API keys
 - Organized output structure: `output/YYYY-MM-DD/Video_Title/`
 - Video metadata extraction (title, uploader)

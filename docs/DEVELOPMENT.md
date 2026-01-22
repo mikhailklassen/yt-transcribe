@@ -20,18 +20,59 @@ yt_transcribe/
 ## Key Design Decisions
 
 ### 1. Modular Architecture
+
 Each component has a single responsibility and can be tested independently. The CLI orchestrates the workflow but doesn't contain business logic.
 
 ### 2. Output Organization
+
 Files are organized as `output/YYYY-MM-DD/Video_Title/` for easy navigation and archival. This was chosen over flat structure for better long-term usability.
 
 ### 3. Validation First
+
 All inputs are validated before processing begins, providing fast feedback and clear error messages.
 
 ### 4. Logging Strategy
+
 - Console: User-friendly messages (INFO level)
 - Log files: Detailed debug information per video
 - Separation of concerns: User output vs. diagnostic logging
+
+### 5. CLI Command Structure
+
+The CLI uses Click's command groups to support multiple operations:
+
+```
+ytt (main entry point)
+│
+├── [URL]                          # Backwards compatible: ytt <url>
+│   └─→ transcribe_command()       # Full workflow
+│
+├── transcribe [URL] [OPTIONS]     # Explicit transcribe command
+│   └─→ transcribe_command()       # Same as above
+│
+└── report [TRANSCRIPT] [OPTIONS]  # Generate report from transcript
+    └─→ report_command()           # Report generation only
+```
+
+**Design Benefits:**
+- Backwards compatibility with existing workflows
+- Clear separation of concerns
+- Future extensibility for additional commands
+- Intuitive command structure
+
+**Implementation:**
+- Uses Click's `@click.group()` decorator to create a command group
+- `transcribe` command: Full workflow (download → transcribe → report)
+- `report` command: Generate report from existing transcript file
+- `main` function: Backwards-compatible wrapper that calls `transcribe`
+
+### 6. Report Generation Workflow
+
+The `report` command allows generating reports from existing transcript files without re-transcribing. This design:
+- Saves time and compute (transcription is expensive)
+- Enables experimentation with different OpenAI models
+- Allows regenerating reports after prompt improvements
+- Works with manually edited transcripts
 
 ## Historical Issues and Resolutions
 
@@ -148,25 +189,6 @@ Before committing:
 - [ ] Error messages are helpful
 - [ ] Logging added for debugging
 
-## Historical Project Review
-
-A comprehensive review was conducted that identified multiple critical issues:
-
-**Critical Issues (All Fixed):**
-1. ✅ 0-byte download bug
-2. ✅ Temporary file cleanup
-3. ✅ Missing logging framework
-4. ✅ Poor error messages
-
-**High Priority (Partially Complete):**
-1. ✅ Input validation
-2. ✅ Better output organization
-3. ⏳ Error handling improvements (ongoing)
-4. ❌ Unit tests (not started)
-5. ❌ Progress indicators (not started)
-
-See `CHANGELOG.md` for detailed history of changes.
-
 ## Troubleshooting Development Issues
 
 ### macOS FFmpeg Issues
@@ -267,4 +289,3 @@ When contributing to this project:
 - [OpenAI API documentation](https://platform.openai.com/docs)
 - [Click documentation](https://click.palletsprojects.com/)
 - [WeasyPrint documentation](https://doc.courtbouillon.org/weasyprint/)
-

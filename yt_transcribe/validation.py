@@ -12,11 +12,17 @@ VALID_WHISPER_MODELS = ["tiny", "base", "small", "medium", "large", "large-v2", 
 
 # Valid OpenAI models (common ones)
 VALID_OPENAI_MODELS = [
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-4.1",
     "gpt-4",
     "gpt-4-turbo",
     "gpt-4-turbo-preview",
     "gpt-4-0125-preview",
     "gpt-4-1106-preview",
+    "gpt-4o",
+    "gpt-4o-mini",
     "gpt-3.5-turbo",
     "gpt-3.5-turbo-16k",
 ]
@@ -176,55 +182,57 @@ def validate_api_key(api_key: str | None) -> Tuple[bool, str]:
 def validate_all_inputs(
     url: str,
     whisper_model: str,
-    openai_model: str,
+    openai_model: str | None,
     output_dir: Path,
     api_key: str | None
 ) -> Tuple[bool, list[str]]:
     """Validate all inputs at once.
-    
+
     Args:
         url: YouTube URL
         whisper_model: Whisper model name
-        openai_model: OpenAI model name
+        openai_model: OpenAI model name (None to skip validation)
         output_dir: Output directory path
-        api_key: OpenAI API key
-        
+        api_key: OpenAI API key (None to skip validation)
+
     Returns:
         Tuple of (all_valid, list_of_error_messages)
     """
     errors = []
-    
+
     # Validate URL
     valid, msg, _ = validate_youtube_url(url)
     if not valid:
         errors.append(f"URL: {msg}")
-    
+
     # Validate Whisper model
     valid, msg = validate_whisper_model(whisper_model)
     if not valid:
         errors.append(f"Whisper model: {msg}")
-    
-    # Validate OpenAI model
-    valid, msg = validate_openai_model(openai_model)
-    if not valid:
-        errors.append(f"OpenAI model: {msg}")
-    
+
+    # Validate OpenAI model (skip if None, e.g., transcript-only mode)
+    if openai_model is not None:
+        valid, msg = validate_openai_model(openai_model)
+        if not valid:
+            errors.append(f"OpenAI model: {msg}")
+
     # Validate output directory
     valid, msg = validate_output_directory(output_dir)
     if not valid:
         errors.append(f"Output directory: {msg}")
-    
-    # Validate API key
-    valid, msg = validate_api_key(api_key)
-    if not valid:
-        errors.append(f"API key: {msg}")
-    
+
+    # Validate API key (skip if None, e.g., transcript-only mode)
+    if api_key is not None:
+        valid, msg = validate_api_key(api_key)
+        if not valid:
+            errors.append(f"API key: {msg}")
+
     all_valid = len(errors) == 0
-    
+
     if all_valid:
         logger.info("All inputs validated successfully")
     else:
         logger.error(f"Input validation failed: {len(errors)} error(s)")
-    
+
     return all_valid, errors
 

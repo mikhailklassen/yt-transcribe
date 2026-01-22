@@ -61,11 +61,13 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 
 ## Usage
 
+### Transcribe a YouTube Video
+
 ```bash
 ytt <youtube-url>
 ```
 
-### Options
+#### Options
 
 - `--output-dir`, `-o`: Base directory for output files (default: `./output`)
 - `--model`, `-m`: Whisper model size - `tiny`, `base`, `small`, `medium`, `large` (default: `base`)
@@ -74,7 +76,7 @@ ytt <youtube-url>
 - `--debug`: Enable debug logging (shows detailed processing info)
 - `--keep-audio`: Keep temporary audio file after processing (for debugging)
 
-### Examples
+#### Examples
 
 ```bash
 # Basic usage
@@ -90,8 +92,41 @@ ytt https://www.youtube.com/watch?v=VIDEO_ID --device cuda
 ytt https://www.youtube.com/watch?v=VIDEO_ID -o ./reports
 
 # Use a different OpenAI model
-ytt https://www.youtube.com/watch?v=VIDEO_ID --openai-model gpt-4-turbo
+ytt https://www.youtube.com/watch?v=VIDEO_ID --openai-model gpt-5-mini
 ```
+
+### Generate Report from Existing Transcript
+
+If you already have a transcript file and want to generate (or regenerate) the report:
+
+```bash
+ytt report <path-to-transcript.txt>
+```
+
+This is useful when you:
+- Want to regenerate a report with different parameters
+- Have a transcript from a previous run and want to create a report without re-transcribing
+- Want to try different OpenAI models to see which produces better results
+
+#### Options
+
+- `--openai-model`: OpenAI model to use (default: `gpt-5-mini`)
+- `--debug`: Enable debug logging
+
+#### Examples
+
+```bash
+# Generate report from existing transcript
+ytt report output/2025-11-05/Video_Title/transcript.txt
+
+# Use a different OpenAI model
+ytt report output/2025-11-05/Video_Title/transcript.txt --openai-model gpt-5
+
+# With debug logging
+ytt report output/2025-11-05/Video_Title/transcript.txt --debug
+```
+
+The report files (`report.md` and `report.pdf`) will be saved in the same directory as the transcript file.
 
 ## Output Files
 
