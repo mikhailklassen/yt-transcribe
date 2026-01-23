@@ -206,7 +206,7 @@ output/
 ```
 output/
 └── 2024-11-05/
-    └── The_Apostles_Creed/
+    └── My_YouTube_Video/
         ├── transcript.txt
         ├── report.md
         ├── report.pdf
