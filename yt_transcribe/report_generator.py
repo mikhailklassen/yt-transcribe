@@ -44,21 +44,29 @@ The title and content of this section should match the content type:
 Format as Markdown. Use formatting (bold, italic, bullets) for readability. Avoid emojis.
 """
 
-# Model context window limits (total tokens: input + output)
+# Model context window limits (total tokens: input + output). Models not listed
+# here skip the local size check and rely on the API to reject oversized input.
 MODEL_CONTEXT_LIMITS = {
-    "gpt-6-luna": 1050000,
-    "gpt-4": 8192,
-    "gpt-4.1": 128000,
-    "gpt-4-turbo": 128000,
-    "gpt-4-turbo-preview": 128000,
-    "gpt-4-0125-preview": 128000,
-    "gpt-4o": 128000,
-    "gpt-4o-mini": 128000,
-    "gpt-5": 128000,
-    "gpt-5-mini": 128000,
-    "gpt-5-nano": 128000,
-    "gpt-3.5-turbo": 16385,
+    "gpt-6-luna": 1_050_000,
+    "gpt-5": 400_000,
+    "gpt-5-mini": 400_000,
+    "gpt-5-nano": 400_000,
+    "gpt-4.1": 1_047_576,
+    "gpt-4.1-mini": 1_047_576,
+    "gpt-4.1-nano": 1_047_576,
+    "o3": 200_000,
+    "o4-mini": 200_000,
+    "gpt-4o": 128_000,
+    "gpt-4o-mini": 128_000,
+    "gpt-4-turbo": 128_000,
+    "gpt-4-turbo-preview": 128_000,
+    "gpt-4-0125-preview": 128_000,
+    "gpt-4": 8_192,
+    "gpt-3.5-turbo": 16_385,
 }
+
+# Rough allowance for chat message formatting around the prompt and transcript
+MESSAGE_OVERHEAD_TOKENS = 100
 
 
 def _estimate_tokens(text: str) -> int:
@@ -66,38 +74,38 @@ def _estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
-def _calculate_max_completion_tokens(
-    model: str, transcript_tokens: int, prompt_tokens: int, safety_buffer: int = 100
-) -> int:
-    """Calculate maximum completion tokens based on model limits and input size.
+def check_context_limit(transcript: str, prompt: str, model: str) -> None:
+    """Fail fast if the input clearly won't fit in the model's context window.
     
     Args:
+        transcript: The transcribed text
+        prompt: System prompt that will be sent with it
         model: OpenAI model name
-        transcript_tokens: Estimated tokens in transcript
-        prompt_tokens: Estimated tokens in system prompt
-        safety_buffer: Safety buffer to avoid hitting exact limit
         
-    Returns:
-        Maximum tokens available for completion
+    Raises:
+        ValueError: If the estimated input exceeds a known model's context window
     """
-    context_limit = MODEL_CONTEXT_LIMITS.get(model, 8192)
+    context_limit = MODEL_CONTEXT_LIMITS.get(model)
+    if context_limit is None:
+        logger.debug(f"No known context limit for {model}; skipping size check")
+        return
     
-    # Estimate total input tokens (prompt + transcript + user message overhead)
-    input_tokens = prompt_tokens + transcript_tokens + 50  # 50 for message overhead
-    
-    # Calculate available tokens for completion
-    available_tokens = context_limit - input_tokens - safety_buffer
-    
-    # Ensure minimum of 500 tokens for completion (for very long transcripts)
-    max_completion = max(500, available_tokens)
-    
+    estimated_input_tokens = (
+        _estimate_tokens(transcript) + _estimate_tokens(prompt) + MESSAGE_OVERHEAD_TOKENS
+    )
     logger.debug(
-        f"Token calculation: context_limit={context_limit}, "
-        f"input_tokens≈{input_tokens}, available={available_tokens}, "
-        f"max_completion={max_completion}"
+        f"Estimated input tokens: {estimated_input_tokens:,} (limit for {model}: {context_limit:,})"
     )
     
-    return max_completion
+    if estimated_input_tokens >= context_limit:
+        error_msg = (
+            f"Transcript is too long for {model}. "
+            f"Estimated input tokens: {estimated_input_tokens:,} (model limit: {context_limit:,}). "
+            "Please use a model with a larger context window (e.g., gpt-6-luna, gpt-4.1), "
+            "or truncate the transcript."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
 
 def generate_report(transcript: str, api_key: str, model: str = "gpt-6-luna", prompt: str | None = None) -> str:
@@ -113,17 +121,12 @@ def generate_report(transcript: str, api_key: str, model: str = "gpt-6-luna", pr
         Generated report as a string
         
     Raises:
-        ValueError: If transcript is too long for the model's context window
+        ValueError: If the transcript is empty or too long for the model's context window
     """
-    logger.info(f"Initializing OpenAI client with model: {model}")
-    client = OpenAI(api_key=api_key)
+    if not transcript.strip():
+        raise ValueError("Transcript is empty (no speech detected?); nothing to summarize")
     
-    transcript_length = len(transcript)
-    logger.debug(f"Transcript length: {transcript_length} characters")
-    
-    # Estimate tokens
-    transcript_tokens = _estimate_tokens(transcript)
-    logger.debug(f"Estimated transcript tokens: {transcript_tokens}")
+    logger.debug(f"Transcript length: {len(transcript)} characters")
     
     # Use custom prompt if provided, otherwise use default
     if prompt is None:
@@ -131,39 +134,11 @@ def generate_report(transcript: str, api_key: str, model: str = "gpt-6-luna", pr
         logger.debug("Using default prompt")
     else:
         logger.debug(f"Using custom prompt ({len(prompt)} characters)")
-
-    prompt_tokens = _estimate_tokens(prompt)
     
-    # Check if input alone exceeds model limits (before calculating completion tokens)
-    context_limit = MODEL_CONTEXT_LIMITS.get(model, 8192)
-    estimated_input_tokens = transcript_tokens + prompt_tokens + 100  # 100 for message overhead
+    check_context_limit(transcript, prompt, model)
     
-    if estimated_input_tokens >= context_limit:
-        if model == "gpt-4":
-            suggested_model = "gpt-5, gpt-5-mini, gpt-5-nano, gpt-4.1, or gpt-4o"
-        else:
-            suggested_model = "a model with larger context window (e.g., gpt-5, gpt-5-mini, gpt-5-nano, gpt-4.1, gpt-4o)"
-        
-        error_msg = (
-            f"Transcript is too long for {model}. "
-            f"Estimated input tokens: {estimated_input_tokens:,} (model limit: {context_limit:,}). "
-            f"Please use {suggested_model} instead, or truncate the transcript."
-        )
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-    
-    # Calculate max completion tokens dynamically based on model limits
-    max_completion_tokens = _calculate_max_completion_tokens(
-        model, transcript_tokens, prompt_tokens
-    )
-    
-    if max_completion_tokens < 1000:
-        logger.warning(
-            f"Limited completion tokens available ({max_completion_tokens}). "
-            f"Report may be shorter than desired. Consider using a model with larger context window."
-        )
-    
-    logger.info(f"Sending request to OpenAI API...")
+    logger.info(f"Sending request to OpenAI API (model: {model})...")
+    client = OpenAI(api_key=api_key)
     
     response = client.chat.completions.create(
         model=model,
@@ -188,11 +163,10 @@ def generate_report(transcript: str, api_key: str, model: str = "gpt-6-luna", pr
     
     # Check if the response was truncated
     if finish_reason == "length":
-        logger.warning(f"Report was truncated due to token limit! "
-                      f"Used {response.usage.completion_tokens} tokens. "
-                      f"Consider using a model with higher token limits or adjusting max_tokens.")
-        logger.warning("The generated report is incomplete. To get the full report, "
-                      "you may need to use a model with larger context window (e.g., 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4o') or increase max_tokens.")
+        logger.warning(
+            f"Report was truncated at the model's output limit "
+            f"({response.usage.completion_tokens} tokens); the saved report is incomplete."
+        )
     
     logger.info(f"Report generated successfully: {len(report)} characters")
     logger.info(f"Finish reason: {finish_reason}")
@@ -201,4 +175,3 @@ def generate_report(transcript: str, api_key: str, model: str = "gpt-6-luna", pr
                 f"total={response.usage.total_tokens}")
     
     return report
-
