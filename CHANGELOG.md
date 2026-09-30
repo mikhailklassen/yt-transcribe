@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unused `pydub` dependency and dead helpers (`sanitize_filename`, `get_video_title`, Homebrew ffmpeg fallback)
 
 ### Added
+- Detailed `--help` for scripts and agents: workflow, output layout, stdout/stderr and exit codes, config lookup, requirements, and examples for every command; `-h` works as a short form
 - Test suite (`uv run pytest`) covering validation, config, output folders, report generation and the CLI end to end
 - `ytt --version`
 - `--prompt-file` option for `summarize` and `report`

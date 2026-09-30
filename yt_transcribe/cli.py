@@ -66,7 +66,7 @@ def transcription_options(help_suffix: str = "") -> Callable:
             type=click.Choice(["cpu", "cuda"], case_sensitive=False),
             default="cpu",
             show_default=True,
-            help=f"Device to use for transcription{help_suffix}",
+            help=f"Transcription device (cuda needs an NVIDIA GPU){help_suffix}",
         )(f)
         f = click.option(
             "--model",
@@ -74,7 +74,7 @@ def transcription_options(help_suffix: str = "") -> Callable:
             type=str,
             default="base",
             show_default=True,
-            help=f"Whisper model size (tiny, base, small, medium, large){help_suffix}",
+            help=f"Whisper model: tiny, base, small, medium, large, large-v2, large-v3 (larger = more accurate, slower){help_suffix}",
         )(f)
         return f
     return decorator
@@ -97,14 +97,14 @@ def report_options(f: Callable) -> Callable:
         "--prompt",
         type=str,
         default=None,
-        help="Custom report prompt text (use --prompt-file for a file). Defaults to the built-in prompt.",
+        help="Custom instructions for the report, as text (replaces the built-in prompt; use --prompt-file for a file)",
     )(f)
     f = click.option(
         "--openai-model",
         type=str,
         default="gpt-6-luna",
         show_default=True,
-        help="OpenAI model to use for report generation",
+        help="OpenAI model for the report (gpt-*, o3/o4-*, chatgpt-*, ft:*)",
     )(f)
     return f
 
@@ -329,7 +329,7 @@ def _exit_with_error(e: BaseException, debug: bool) -> NoReturn:
 # CLI Commands
 # ============================================================================
 
-@click.group()
+@click.group(context_settings={"help_option_names": ["-h", "--help"], "max_content_width": 100})
 @click.option(
     "--config",
     "config_path",
@@ -340,10 +340,56 @@ def _exit_with_error(e: BaseException, debug: bool) -> NoReturn:
 @click.version_option(__version__, prog_name="yt-transcribe")
 @click.pass_context
 def cli(ctx: click.Context, config_path: Path | None) -> None:
-    """Transcribe YouTube videos and generate AI-powered reports.
+    """Transcribe YouTube videos locally and summarize them with OpenAI.
 
-    Defaults for --output-dir, --model, --device and --openai-model can be set
-    in a YAML config file. Command-line options always take precedence.
+    \b
+    WORKFLOW
+      ytt transcribe URL    Download the audio and transcribe it on this machine
+                            (faster-whisper). No API key needed. Writes transcript.txt.
+      ytt summarize URL     Transcribe (skipped if the video already has a transcript),
+                            then write an AI report, report.md. Needs OPENAI_API_KEY.
+      ytt report FILE       Write report.md from an existing transcript file.
+      ytt config            Show which config file is active and what it sets.
+
+    \b
+    OUTPUT
+      Each video gets one folder, found again on later runs by its video ID:
+        <output_dir>/YYYY-MM-DD/<Video_Title>_<VIDEO_ID>/
+          transcript.txt      plain-text transcript (single paragraph, no timestamps)
+          report.md           Markdown report (summarize, report)
+          report.pdf          only with --pdf
+          audio.mp3           only with --keep-audio
+          yt-transcribe.log   detailed log of every run for this video
+      On success, stdout ends with "📁 <folder>/" followed by the files written.
+      Nothing is written to the current directory (unless --output-dir points there).
+
+    \b
+    FOR SCRIPTS AND AGENTS
+      - Progress messages go to stdout; warnings and errors go to stderr.
+      - Exit codes: 0 success, 1 invalid input or processing error,
+        2 usage error (bad or conflicting options), 130 interrupted.
+      - Quote URLs in the shell: they often contain '&' or '?'.
+      - Transcription can take minutes for long videos; the first run also
+        downloads the Whisper model. Re-running summarize on the same video
+        reuses the transcript, so it only makes one OpenAI call.
+      - report.md is overwritten on every summarize/report run.
+      - To get results, read transcript.txt / report.md in the printed folder.
+
+    \b
+    CONFIGURATION
+      Defaults for --output-dir, --model, --device and --openai-model come from a
+      YAML file: --config PATH, else $YTT_CONFIG, else
+      ~/.config/yt-transcribe/config.yml. Command-line options always win.
+      Run `ytt config -h` for the supported keys.
+
+    \b
+    REQUIREMENTS
+      - ffmpeg on PATH.
+      - summarize/report: OPENAI_API_KEY in the environment, or in the .env file at
+        the root of the yt-transcribe source checkout. The environment wins if both.
+      - --pdf: the 'pdf' extra (WeasyPrint with Cairo/Pango system libraries).
+
+    Run `ytt COMMAND --help` for each command's options and examples.
     """
     # Console-only logging until a command knows its output directory
     setup_logging()
@@ -362,10 +408,24 @@ def cli(ctx: click.Context, config_path: Path | None) -> None:
     ctx.default_map = build_default_map(config)
 
 
-@cli.command(name="config")
+@cli.command(name="config", short_help="Show the active config file and its settings.")
 @click.pass_context
 def config_command(ctx: click.Context) -> None:
-    """Show the config file location and the settings loaded from it."""
+    """Show which config file is active and the settings it provides.
+
+    \b
+    The file is looked up in this order:
+      1. ytt --config PATH COMMAND ...
+      2. $YTT_CONFIG
+      3. $XDG_CONFIG_HOME/yt-transcribe/config.yml (default ~/.config/yt-transcribe/config.yml)
+
+    \b
+    Supported keys (all optional; command-line options override them):
+      output_dir: ~/Documents/yt-transcribe   base output directory
+      openai_model: gpt-6-luna                model for summarize/report
+      whisper_model: base                     tiny|base|small|medium|large|large-v2|large-v3
+      device: cpu                             cpu|cuda
+    """
     config_path = ctx.obj["config_path"]
     config = ctx.obj["config"]
 
@@ -375,7 +435,7 @@ def config_command(ctx: click.Context) -> None:
         click.echo(f"  {key}: {value}")
 
 
-@cli.command()
+@cli.command(short_help="Download and transcribe a video (no API key needed).")
 @click.argument("url", type=str)
 @output_dir_option
 @transcription_options()
@@ -388,18 +448,25 @@ def transcribe(
     keep_audio: bool,
     debug: bool,
 ) -> None:
-    """Download and transcribe YouTube video to text.
+    """Download a YouTube video's audio and transcribe it on this machine.
 
-    URL: YouTube video URL to transcribe
+    Uses faster-whisper locally, so no OpenAI API key is needed.
 
-    This command downloads the audio from a YouTube video and transcribes it
-    to text using the Whisper model. The transcript is saved to:
-    output/YYYY-MM-DD/Video_Title_VIDEOID/transcript.txt
+    \b
+    Accepted URL forms (www., m. and music. hosts all work):
+      https://www.youtube.com/watch?v=VIDEO_ID      https://youtu.be/VIDEO_ID
+      https://www.youtube.com/shorts/VIDEO_ID       .../embed/VIDEO_ID, .../live/VIDEO_ID
 
-    If the video was processed before (on any date), its existing folder is
-    reused and the transcript is replaced.
+    \b
+    Writes <output_dir>/YYYY-MM-DD/<Video_Title>_<VIDEO_ID>/transcript.txt.
+    If the video already has a folder (from any date), that folder is reused
+    and its transcript is replaced.
 
-    No OpenAI API key is required for this command.
+    \b
+    Examples:
+      ytt transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
+      ytt transcribe "https://youtu.be/VIDEO_ID" --model small
+      ytt transcribe "https://youtu.be/VIDEO_ID" -o ~/transcripts --keep-audio
     """
     _setup_logging(debug)
 
@@ -439,7 +506,7 @@ def transcribe(
         _exit_with_error(e, debug)
 
 
-@cli.command()
+@cli.command(short_help="Transcribe if needed, then write an AI report (needs OPENAI_API_KEY).")
 @click.argument("url", type=str)
 @output_dir_option
 @transcription_options(" - only used if transcription is needed")
@@ -457,22 +524,31 @@ def summarize(
     pdf: bool,
     debug: bool,
 ) -> None:
-    """Transcribe (if needed) and generate AI summary of YouTube video.
-
-    URL: YouTube video URL to summarize
-
-    If this video already has a transcript (from any date), it is reused.
-    Otherwise the video is downloaded and transcribed first. Then an
-    AI-powered summary report is generated.
+    """Transcribe a YouTube video (if needed) and write an AI summary report.
 
     \b
-    Files are saved to: output/YYYY-MM-DD/Video_Title_VIDEOID/
-      • transcript.txt (created if not already present)
-      • report.md (AI-generated summary)
-      • report.pdf (only with --pdf)
-      • yt-transcribe.log
+    Steps:
+      1. Find the video's folder by video ID (any date), or create
+         <output_dir>/YYYY-MM-DD/<Video_Title>_<VIDEO_ID>/.
+      2. Reuse transcript.txt if it exists; otherwise download and transcribe.
+      3. Send the transcript to OpenAI and save report.md (plus report.pdf with --pdf).
 
-    Requires OPENAI_API_KEY environment variable.
+    \b
+    The built-in prompt produces a Markdown report with a title, a Summary,
+    Key Ideas, and a third section suited to the content (e.g. "Why It Matters"
+    or "Implementation Notes"). --prompt / --prompt-file replace it entirely.
+
+    \b
+    Requires OPENAI_API_KEY (environment or the source checkout's .env).
+    Accepts the same URL forms as `ytt transcribe`.
+
+    \b
+    Examples:
+      ytt summarize "https://www.youtube.com/watch?v=VIDEO_ID"
+      ytt summarize "https://youtu.be/VIDEO_ID" --pdf
+      ytt summarize "https://youtu.be/VIDEO_ID" --openai-model gpt-5
+      ytt summarize "https://youtu.be/VIDEO_ID" --prompt "List every tool mentioned"
+      ytt summarize "https://youtu.be/VIDEO_ID" --prompt-file my_prompt.txt
     """
     _setup_logging(debug)
 
@@ -536,7 +612,7 @@ def summarize(
         _exit_with_error(e, debug)
 
 
-@cli.command(name="report")
+@cli.command(name="report", short_help="Write an AI report from an existing transcript file.")
 @click.argument("transcript_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @report_options
 @debug_option
@@ -548,11 +624,22 @@ def report_command(
     pdf: bool,
     debug: bool,
 ) -> None:
-    """Generate a report from an existing transcript file.
+    """Write an AI report from an existing transcript file.
 
-    TRANSCRIPT_FILE: Path to the transcript.txt file
+    \b
+    TRANSCRIPT_FILE can be any non-empty UTF-8 text file; it doesn't have to
+    come from ytt. report.md (plus report.pdf with --pdf) is written next to
+    it, replacing any existing report there. Useful for trying another model
+    or prompt without re-transcribing.
 
-    The report is saved next to the transcript file.
+    \b
+    Requires OPENAI_API_KEY (environment or the source checkout's .env).
+
+    \b
+    Examples:
+      ytt report ~/Documents/yt-transcribe/2026-09-29/Some_Title_VIDEO_ID/transcript.txt
+      ytt report transcript.txt --openai-model gpt-5 --pdf
+      ytt report transcript.txt --prompt "Summarize in 5 bullet points"
     """
     # Get the directory containing the transcript
     output_dir = transcript_file.parent

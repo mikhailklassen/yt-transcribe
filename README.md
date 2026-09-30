@@ -6,11 +6,12 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 
 - Download audio from YouTube videos
 - Transcribe audio using faster-whisper
-- Generate comprehensive reports with OpenAI (Summary, Key Ideas, Why It Matters)
+- Generate comprehensive reports with OpenAI (Summary, Key Ideas, and a section adapted to the content)
 - Export reports as Markdown, with optional PDF (`--pdf`)
 - **Config file** - Set your default output directory and models in `config.yml`
 - **Input validation** - Validates URLs, model names, and API keys before processing
-- **Organized outputs** - Files organized by date and video title
+- **Organized outputs** - One folder per video (date, title and video ID), reused on later runs so videos are never transcribed twice
+- **Script- and agent-friendly** - Detailed `ytt --help`, clean stdout/stderr split and meaningful exit codes
 - **Detailed logging** - Debug mode with comprehensive logs per video
 - **Error handling** - Clear, actionable error messages
 
@@ -59,6 +60,9 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
    ```bash
    echo "OPENAI_API_KEY=your-api-key-here" > .env
    ```
+   Or set the `OPENAI_API_KEY` environment variable.
+
+**How the API key is found:** an `OPENAI_API_KEY` environment variable wins; otherwise the `.env` file at the root of this repository is used (also when `ytt` is installed globally and run from another directory). If you get a 401 error, check that your shell doesn't export an old key that overrides `.env`.
 
 ### Install `ytt` globally (optional)
 
@@ -67,6 +71,10 @@ To run `ytt` from any directory without `uv run`:
 ```bash
 uv tool install --editable '.[pdf]'
 ```
+
+The editable install runs the code in this repository, so keep the checkout in place; changes to it take effect without reinstalling. Without a global install, run commands from the repo as `uv run ytt …`.
+
+Run `ytt --help` (or `ytt -h`) for the full workflow, output layout, exit codes and configuration, and `ytt COMMAND --help` for each command's options and examples. `ytt --version` prints the version.
 
 ## Usage
 
@@ -82,12 +90,14 @@ This creates: `output/YYYY-MM-DD/Video_Title_VIDEOID/transcript.txt`
 
 Accepted URLs include `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `/embed/…` and `/live/…` links (including `m.` and `music.` hosts).
 
+Quote URLs in the shell, since they often contain `&` or `?`.
+
 **No OpenAI API key required** for transcription.
 
 #### Options
 
 - `--output-dir`, `-o`: Base directory for output files (default: `output_dir` from config, else `./output`)
-- `--model`, `-m`: Whisper model size - `tiny`, `base`, `small`, `medium`, `large` (default: `base`)
+- `--model`, `-m`: Whisper model - `tiny`, `base`, `small`, `medium`, `large`, `large-v2`, `large-v3` (default: `base`)
 - `--device`, `-d`: Device to use - `cpu` or `cuda` (default: `cpu`)
 - `--keep-audio`: Save the downloaded audio as `audio.mp3` in the output folder
 - `--debug`: Enable debug logging (shows detailed processing info)
@@ -124,7 +134,7 @@ This creates:
 - `report.pdf` (only with `--pdf`)
 - `yt-transcribe.log`
 
-**Requires** `OPENAI_API_KEY` environment variable.
+**Requires** `OPENAI_API_KEY` (environment variable or `.env`; see [Installation](#installation)). `report.md` is overwritten each time.
 
 #### Options
 
@@ -198,7 +208,7 @@ ytt report output/2025-11-05/Video_Title_VIDEOID/transcript.txt --prompt "Focus 
 ytt report output/2025-11-05/Video_Title_VIDEOID/transcript.txt --debug
 ```
 
-The report (`report.md`, plus `report.pdf` with `--pdf`) will be saved in the same directory as the transcript file.
+The report (`report.md`, plus `report.pdf` with `--pdf`) will be saved in the same directory as the transcript file, replacing any existing report there.
 
 ## Configuration
 
@@ -213,7 +223,7 @@ All keys are optional, and command-line options always override them:
 ```yaml
 output_dir: ~/Documents/yt-transcribe   # base output directory
 openai_model: gpt-6-luna                # used by summarize and report
-whisper_model: base                     # tiny, base, small, medium, large
+whisper_model: base                     # tiny, base, small, medium, large, large-v2, large-v3
 device: cpu                             # cpu or cuda
 ```
 
@@ -221,17 +231,20 @@ A commented template is in [config.example.yml](config.example.yml). Run `ytt co
 
 ## Output Files
 
-Files are organized by date and video title:
+Each video gets one folder, named by date, title and video ID:
 
 ```
 output/
-└── YYYY-MM-DD/              # Date of processing
-    └── Video_Title_VIDEOID/ # Sanitized title + YouTube video ID
-        ├── transcript.txt   # Raw transcription
-        ├── report.md        # AI-generated report (Markdown) - only with summarize
-        ├── report.pdf       # Report as PDF - only with --pdf
-        └── yt-transcribe.log # Processing log
+└── YYYY-MM-DD/               # Date the video was first processed
+    └── Video_Title_VIDEOID/  # Sanitized title + YouTube video ID
+        ├── transcript.txt    # Plain-text transcript (single paragraph, no timestamps)
+        ├── report.md         # AI-generated report (summarize/report)
+        ├── report.pdf        # Report as PDF - only with --pdf
+        ├── audio.mp3         # Downloaded audio - only with --keep-audio
+        └── yt-transcribe.log # Log of every run for this video
 ```
+
+On later runs the video's existing folder is found by its ID (whatever the date) and reused. Audio is downloaded into a temporary directory that is always deleted, so nothing is written to the directory you run `ytt` from.
 
 **What each command creates:**
 
@@ -258,6 +271,13 @@ output/
 - OpenAI API key
 
 **Note:** Follow the [Installation](#installation) section for your platform to install all dependencies correctly.
+
+## Scripting and Agents
+
+- Progress messages go to **stdout**; warnings and errors go to **stderr**. On success, stdout ends with `📁 <folder>/` followed by the files written.
+- Exit codes: `0` success, `1` invalid input or processing error, `2` usage error (bad or conflicting options), `130` interrupted.
+- Running `summarize` again on the same video reuses the transcript and only makes one OpenAI call.
+- `ytt --help` documents all of this, so an agent can learn the tool from the help text alone.
 
 ## Notes
 
@@ -297,6 +317,18 @@ brew install ffmpeg  # macOS
 # or
 sudo apt-get install ffmpeg  # Linux
 ```
+
+### YouTube "HTTP Error 403: Forbidden"
+
+YouTube changes regularly and older `yt-dlp` versions get blocked. Upgrade it:
+
+```bash
+uv lock --upgrade-package yt-dlp && uv sync --extra pdf
+```
+
+### OpenAI "401 Unauthorized" / "Incorrect API key"
+
+The key being used is invalid. An `OPENAI_API_KEY` exported in your shell overrides `.env`, so check both (`echo ${OPENAI_API_KEY: -4}` shows the last four characters of the shell's key).
 
 ### Fontconfig Warnings
 

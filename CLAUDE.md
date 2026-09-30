@@ -9,8 +9,14 @@ yt-transcribe is a CLI tool that downloads YouTube videos, transcribes audio usi
 ## Commands
 
 ```bash
-# Install dependencies
-uv sync
+# Install dependencies (plain `uv sync` removes the optional WeasyPrint/PDF extra)
+uv sync --extra pdf
+
+# Global `ytt` on PATH (editable: runs this checkout's code, no reinstall needed)
+uv tool install --editable '.[pdf]'
+
+# Fix YouTube 403 download errors (yt-dlp falls behind YouTube every few months)
+uv lock --upgrade-package yt-dlp && uv sync --extra pdf
 
 # Transcribe only (no OpenAI key required)
 ytt transcribe <youtube-url>
@@ -33,18 +39,15 @@ ytt summarize <url> --debug --keep-audio
 
 # Run tests (YouTube, Whisper and OpenAI are faked; no network or API key needed)
 uv run pytest
-
-# Install with PDF support (WeasyPrint is an optional extra)
-uv sync --extra pdf
 ```
 
-Tests live in `tests/`. `tests/test_cli.py` drives the CLI end to end via `CliRunner` with the download, transcription and OpenAI calls monkeypatched on `yt_transcribe.cli`. Still smoke-test with a real video after changing download or transcription code.
+Tests live in `tests/`. `tests/test_cli.py` drives the CLI end to end via `CliRunner` with the download, transcription and OpenAI calls monkeypatched on `yt_transcribe.cli`. `tests/conftest.py` points `YTT_CONFIG`, `OPENAI_API_KEY` and the working directory at temp values so tests never touch the real config, key or repo. Still smoke-test with a real video after changing download or transcription code.
 
 ## Architecture
 
 ```
 yt_transcribe/
-├── cli.py              # Click CLI with command groups (transcribe, summarize, report)
+├── cli.py              # Click CLI (transcribe, summarize, report, config), shared option decorators
 ├── downloader.py       # YouTube audio download via yt-dlp
 ├── transcriber.py      # Audio transcription via faster-whisper
 ├── report_generator.py # AI report generation via OpenAI
@@ -64,6 +67,10 @@ tests/                  # pytest suite; test_cli.py fakes YouTube/Whisper/OpenAI
 
 **Output organization:** Files saved to `output/YYYY-MM-DD/Video_Title_VIDEOID/` containing transcript.txt, report.md, report.pdf (with --pdf), and yt-transcribe.log. `output.find_output_directory` locates a video's existing folder by ID on any date, so transcripts are reused. Audio is downloaded into a temporary directory. Nothing is written to the current directory unless `-o` points there.
 
+**Help text is the agent interface:** other agents on this machine learn `ytt` from `ytt --help`. The `cli` group docstring documents the workflow, output layout, stdout/stderr split, exit codes, config lookup and requirements; each command's docstring has URL forms and examples. Keep these (and README.md) in sync with any CLI behavior change. Use Click's `\b` marker before blocks that must not be re-wrapped.
+
+**API key:** read with `os.getenv("OPENAI_API_KEY")` after `load_dotenv()`. A real environment variable wins over `.env`; `load_dotenv()` locates `.env` by walking up from `cli.py`, so the repo-root `.env` is found even when the global `ytt` runs from another directory.
+
 **Logging:** console logs go to stderr at WARNING (everything with `--debug`); records from `yt_transcribe.cli` are kept off the console because the CLI reports progress via `click.echo`. The log file is written only in the video's output folder.
 
 ## Code Conventions
@@ -77,10 +84,9 @@ tests/                  # pytest suite; test_cli.py fakes YouTube/Whisper/OpenAI
 ## Documentation Rules
 
 **DO NOT create new markdown files in the project root.** Update existing files instead:
-- User-facing changes → `README.md`
+- User-facing changes and usage examples → `README.md` (and the `--help` text in `cli.py`)
 - All changes → `CHANGELOG.md`
-- Architecture/design → `docs/DEVELOPMENT.md`
-- Usage examples → `docs/USAGE.md`
+- Architecture/design and development workflow → `CLAUDE.md`
 
 Use the todo tool for task tracking, not markdown files.
 
