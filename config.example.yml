@@ -1,0 +1,16 @@
+# yt-transcribe configuration
+#
+# Copy to ~/.config/yt-transcribe/config.yml (or point $YTT_CONFIG / --config at it).
+# Every key is optional; command-line options always override these values.
+
+# Base directory for output (files go in <output_dir>/YYYY-MM-DD/Video_Title/)
+output_dir: ~/Documents/yt-transcribe
+
+# OpenAI model used by `summarize` and `report`
+openai_model: gpt-6-luna
+
+# Whisper model size: tiny, base, small, medium, large
+whisper_model: base
+
+# Transcription device: cpu or cuda
+device: cpu

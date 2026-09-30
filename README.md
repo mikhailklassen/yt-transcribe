@@ -7,7 +7,8 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 - Download audio from YouTube videos
 - Transcribe audio using faster-whisper
 - Generate comprehensive reports with OpenAI (Summary, Key Ideas, Why It Matters)
-- Export reports as both Markdown and PDF
+- Export reports as Markdown, with optional PDF (`--pdf`)
+- **Config file** - Set your default output directory and models in `config.yml`
 - **Input validation** - Validates URLs, model names, and API keys before processing
 - **Organized outputs** - Files organized by date and video title
 - **Detailed logging** - Debug mode with comprehensive logs per video
@@ -75,7 +76,7 @@ This creates: `output/YYYY-MM-DD/Video_Title/transcript.txt`
 
 #### Options
 
-- `--output-dir`, `-o`: Base directory for output files (default: `./output`)
+- `--output-dir`, `-o`: Base directory for output files (default: `output_dir` from config, else `./output`)
 - `--model`, `-m`: Whisper model size - `tiny`, `base`, `small`, `medium`, `large` (default: `base`)
 - `--device`, `-d`: Device to use - `cpu` or `cuda` (default: `cpu`)
 - `--keep-audio`: Keep temporary audio file after processing (for debugging)
@@ -110,19 +111,20 @@ ytt summarize https://youtube.com/watch?v=VIDEO_ID
 This creates:
 - `transcript.txt` (if not already present)
 - `report.md` (AI-generated summary)
-- `report.pdf` (PDF version)
+- `report.pdf` (only with `--pdf`)
 - `yt-transcribe.log`
 
 **Requires** `OPENAI_API_KEY` environment variable.
 
 #### Options
 
-- `--output-dir`, `-o`: Base directory for output files (default: `./output`)
+- `--output-dir`, `-o`: Base directory for output files (default: `output_dir` from config, else `./output`)
 - `--model`, `-m`: Whisper model size (default: `base`) - only used if transcription is needed
 - `--device`, `-d`: Device: `cpu` or `cuda` (default: `cpu`) - only used if transcription is needed
 - `--keep-audio`: Keep audio file - only used if transcription is needed
-- `--openai-model`: OpenAI model to use (default: `gpt-6-luna`)
+- `--openai-model`: OpenAI model to use (default: `openai_model` from config, else `gpt-6-luna`)
 - `--prompt`: Custom summary prompt (file path or string)
+- `--pdf`: Also save the report as `report.pdf`
 - `--debug`: Enable debug logging
 
 #### Examples
@@ -142,6 +144,9 @@ ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --prompt "Summarize this 
 
 # Use larger Whisper model if transcription is needed
 ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --model large
+
+# Also produce a PDF
+ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --pdf
 ```
 
 ### Generate Report from Existing Transcript
@@ -160,8 +165,9 @@ This is useful when you:
 
 #### Options
 
-- `--openai-model`: OpenAI model to use (default: `gpt-6-luna`)
+- `--openai-model`: OpenAI model to use (default: `openai_model` from config, else `gpt-6-luna`)
 - `--prompt`: Custom summary prompt (file path or string)
+- `--pdf`: Also save the report as `report.pdf`
 - `--debug`: Enable debug logging
 
 #### Examples
@@ -180,7 +186,26 @@ ytt report output/2025-11-05/Video_Title/transcript.txt --prompt "Focus on key t
 ytt report output/2025-11-05/Video_Title/transcript.txt --debug
 ```
 
-The report files (`report.md` and `report.pdf`) will be saved in the same directory as the transcript file.
+The report (`report.md`, plus `report.pdf` with `--pdf`) will be saved in the same directory as the transcript file.
+
+## Configuration
+
+Defaults can be set in a YAML config file, so you don't have to repeat options on every run. The file is read from, in order:
+
+1. `--config PATH` (e.g. `ytt --config my.yml summarize URL`)
+2. `$YTT_CONFIG`
+3. `~/.config/yt-transcribe/config.yml` (or `$XDG_CONFIG_HOME/yt-transcribe/config.yml`)
+
+All keys are optional, and command-line options always override them:
+
+```yaml
+output_dir: ~/Documents/yt-transcribe   # base output directory
+openai_model: gpt-6-luna                # used by summarize and report
+whisper_model: base                     # tiny, base, small, medium, large
+device: cpu                             # cpu or cuda
+```
+
+A commented template is in [config.example.yml](config.example.yml). Run `ytt config` to see which file is being used and what it sets.
 
 ## Output Files
 
@@ -192,15 +217,15 @@ output/
     └── Video_Title/         # Sanitized video title
         ├── transcript.txt   # Raw transcription
         ├── report.md        # AI-generated report (Markdown) - only with summarize
-        ├── report.pdf       # Report as PDF - only with summarize
+        ├── report.pdf       # Report as PDF - only with --pdf
         └── yt-transcribe.log # Processing log
 ```
 
 **What each command creates:**
 
 - `ytt transcribe URL`: Creates `transcript.txt` only
-- `ytt summarize URL`: Creates `transcript.txt` (if needed), `report.md`, and `report.pdf`
-- `ytt report FILE`: Creates `report.md` and `report.pdf` in the same directory as the transcript file
+- `ytt summarize URL`: Creates `transcript.txt` (if needed) and `report.md` (plus `report.pdf` with `--pdf`)
+- `ytt report FILE`: Creates `report.md` (plus `report.pdf` with `--pdf`) in the same directory as the transcript file
 
 **Example:**
 ```
@@ -217,7 +242,7 @@ output/
 
 - Python 3.11+
 - FFmpeg (for audio extraction)
-- System libraries: Cairo, Pango, GDK-PixBuf, libffi (for PDF generation)
+- System libraries: Cairo, Pango, GDK-PixBuf, libffi (only needed for `--pdf`)
 - OpenAI API key
 
 **Note:** Follow the [Installation](#installation) section for your platform to install all dependencies correctly.

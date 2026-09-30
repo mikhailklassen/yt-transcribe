@@ -41,13 +41,17 @@ yt_transcribe/
 ├── transcriber.py      # Audio transcription via faster-whisper
 ├── report_generator.py # AI report generation via OpenAI
 ├── output.py           # File output handling
-└── validation.py       # Input validation (URLs, models, API keys)
+├── validation.py       # Input validation (URLs, models, API keys)
+└── config.py           # YAML config loading (~/.config/yt-transcribe/config.yml)
 ```
 
-**CLI structure:** Uses Click command groups with three commands:
+**Config:** `config.py` loads `config.yml` and maps its keys onto Click's `default_map` in the `cli` group callback, so CLI options override config values. `ytt config` shows the active file.
+
+**CLI structure:** Uses Click command groups with these commands:
 - `ytt transcribe URL` - Download and transcribe only (creates transcript.txt)
-- `ytt summarize URL` - Transcribe (if needed) + generate AI summary (creates transcript.txt, report.md, report.pdf)
+- `ytt summarize URL` - Transcribe (if needed) + generate AI summary (creates transcript.txt, report.md; report.pdf with --pdf)
 - `ytt report FILE` - Generate report from existing transcript file
+- `ytt config` - Show the active config file and its settings
 
 **Output organization:** Files saved to `output/YYYY-MM-DD/Video_Title/` containing transcript.txt, report.md, report.pdf, and yt-transcribe.log.
 

@@ -1259,6 +1259,7 @@ dependencies = [
     { name = "openai" },
     { name = "pydub" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "weasyprint" },
     { name = "yt-dlp" },
 ]
@@ -1271,6 +1272,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pydub", specifier = ">=0.25.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "weasyprint", specifier = ">=60.0" },
     { name = "yt-dlp", specifier = ">=2026.8.19" },
 ]

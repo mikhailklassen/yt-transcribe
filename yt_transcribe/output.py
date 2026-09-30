@@ -3,7 +3,6 @@
 import re
 from pathlib import Path
 from datetime import datetime
-from weasyprint import HTML
 from markdown import markdown
 import logging
 
@@ -96,15 +95,16 @@ def save_transcript(transcript: str, output_dir: Path) -> Path:
     return filepath
 
 
-def save_report(report: str, output_dir: Path) -> tuple[Path, Path]:
-    """Save report as both Markdown and PDF.
+def save_report(report: str, output_dir: Path, pdf: bool = False) -> tuple[Path, Path | None]:
+    """Save report as Markdown, and optionally as PDF.
     
     Args:
         report: The report text (in Markdown format)
         output_dir: Directory to save the files (already organized by date/video)
+        pdf: Also render the report to report.pdf
         
     Returns:
-        Tuple of (markdown_path, pdf_path)
+        Tuple of (markdown_path, pdf_path); pdf_path is None when pdf is False
     """
     logger.debug(f"Saving report to: {output_dir}")
     
@@ -113,6 +113,13 @@ def save_report(report: str, output_dir: Path) -> tuple[Path, Path]:
     logger.debug(f"Saving Markdown to: {md_path}")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(report)
+    
+    if not pdf:
+        logger.info(f"Report saved: {md_path}")
+        return md_path, None
+    
+    # Imported lazily: WeasyPrint is slow to load and needs system libraries
+    from weasyprint import HTML
     
     # Convert Markdown to HTML and then to PDF
     logger.debug("Converting Markdown to HTML")

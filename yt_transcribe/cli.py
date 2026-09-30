@@ -13,6 +13,7 @@ from yt_transcribe.transcriber import transcribe_audio
 from yt_transcribe.report_generator import generate_report
 from yt_transcribe.output import save_transcript, save_report, create_output_directory
 from yt_transcribe.validation import validate_all_inputs, validate_openai_model, validate_api_key
+from yt_transcribe.config import default_config_path, load_config, build_default_map
 
 # Load environment variables
 load_dotenv()
@@ -135,9 +136,10 @@ def _generate_and_save_report(
     output_dir: Path,
     openai_model: str,
     openai_api_key: str,
-    prompt: str | None
+    prompt: str | None,
+    pdf: bool = False
 ) -> None:
-    """Generate AI report and save as markdown and PDF.
+    """Generate AI report and save as markdown (and optionally PDF).
 
     Args:
         transcript_path: Path to transcript file
@@ -145,6 +147,7 @@ def _generate_and_save_report(
         openai_model: OpenAI model to use
         openai_api_key: OpenAI API key
         prompt: Custom prompt (file path or string)
+        pdf: Also save the report as PDF
     """
     # Read the transcript
     logger.info(f"Reading transcript from: {transcript_path}")
@@ -173,11 +176,11 @@ def _generate_and_save_report(
     click.echo("✓ Report generated")
     logger.info("Report generated")
 
-    # Save report as Markdown and PDF to organized directory
-    md_path, pdf_path = save_report(report, output_dir)
+    # Save report as Markdown (and PDF if requested) to organized directory
+    md_path, pdf_path = save_report(report, output_dir, pdf=pdf)
     click.echo(f"✓ Report saved to: {md_path}")
-    click.echo(f"✓ Report saved to: {pdf_path}")
-    logger.info(f"Reports saved to: {md_path}, {pdf_path}")
+    if pdf_path:
+        click.echo(f"✓ Report saved to: {pdf_path}")
 
 
 # ============================================================================
@@ -185,9 +188,45 @@ def _generate_and_save_report(
 # ============================================================================
 
 @click.group()
-def cli():
-    """Transcribe YouTube videos and generate AI-powered reports."""
-    pass
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to config file (default: $YTT_CONFIG or ~/.config/yt-transcribe/config.yml)",
+)
+@click.pass_context
+def cli(ctx: click.Context, config_path: Path | None) -> None:
+    """Transcribe YouTube videos and generate AI-powered reports.
+
+    Defaults for --output-dir, --model, --device and --openai-model can be set
+    in a YAML config file. Command-line options always take precedence.
+    """
+    if config_path is not None and not config_path.exists():
+        raise click.BadParameter(f"File not found: {config_path}", param_hint="--config")
+    config_path = config_path or default_config_path()
+
+    try:
+        config = load_config(config_path)
+    except ValueError as e:
+        click.echo(f"❌ {e}", err=True)
+        sys.exit(1)
+
+    ctx.obj = {"config_path": config_path, "config": config}
+    ctx.default_map = build_default_map(config)
+
+
+@cli.command(name="config")
+@click.pass_context
+def config_command(ctx: click.Context) -> None:
+    """Show the config file location and the settings loaded from it."""
+    config_path = ctx.obj["config_path"]
+    config = ctx.obj["config"]
+
+    status = "" if config_path.exists() else " (not found - using built-in defaults)"
+    click.echo(f"Config file: {config_path}{status}")
+    for key, value in config.items():
+        click.echo(f"  {key}: {value}")
 
 
 @cli.command()
@@ -197,13 +236,15 @@ def cli():
     "-o",
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     default=Path.cwd() / "output",
-    help="Base directory for output files (default: ./output)",
+    show_default=True,
+    help="Base directory for output files",
 )
 @click.option(
     "--model",
     "-m",
     type=str,
     default="base",
+    show_default=True,
     help="Whisper model size (tiny, base, small, medium, large)",
 )
 @click.option(
@@ -211,6 +252,7 @@ def cli():
     "-d",
     type=click.Choice(["cpu", "cuda"], case_sensitive=False),
     default="cpu",
+    show_default=True,
     help="Device to use for transcription",
 )
 @click.option(
@@ -301,13 +343,15 @@ def transcribe(
     "-o",
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     default=Path.cwd() / "output",
-    help="Base directory for output files (default: ./output)",
+    show_default=True,
+    help="Base directory for output files",
 )
 @click.option(
     "--model",
     "-m",
     type=str,
     default="base",
+    show_default=True,
     help="Whisper model size (tiny, base, small, medium, large) - only used if transcription is needed",
 )
 @click.option(
@@ -315,6 +359,7 @@ def transcribe(
     "-d",
     type=click.Choice(["cpu", "cuda"], case_sensitive=False),
     default="cpu",
+    show_default=True,
     help="Device to use for transcription - only used if transcription is needed",
 )
 @click.option(
@@ -326,7 +371,13 @@ def transcribe(
     "--openai-model",
     type=str,
     default="gpt-6-luna",
+    show_default=True,
     help="OpenAI model to use for report generation",
+)
+@click.option(
+    "--pdf",
+    is_flag=True,
+    help="Also save the report as PDF",
 )
 @click.option(
     "--prompt",
@@ -347,6 +398,7 @@ def summarize(
     keep_audio: bool,
     openai_model: str,
     prompt: str | None,
+    pdf: bool,
     debug: bool,
 ) -> None:
     """Transcribe (if needed) and generate AI summary of YouTube video.
@@ -357,10 +409,11 @@ def summarize(
     If found, it uses the existing transcript. If not, it downloads and transcribes
     the video first. Then it generates an AI-powered summary report.
 
+    \b
     Files are saved to: output/YYYY-MM-DD/Video_Title/
       • transcript.txt (created if not already present)
       • report.md (AI-generated summary)
-      • report.pdf (PDF version)
+      • report.pdf (only with --pdf)
       • yt-transcribe.log
 
     Requires OPENAI_API_KEY environment variable.
@@ -412,14 +465,15 @@ def summarize(
             click.echo(f"✓ Transcription complete: {transcript_path}")
 
         # Generate report
-        _generate_and_save_report(transcript_path, output_dir, openai_model, api_key, prompt)
+        _generate_and_save_report(transcript_path, output_dir, openai_model, api_key, prompt, pdf)
 
         # Success message
         click.echo(f"\n✓ All done! Files saved to:")
         click.echo(f"  📁 {output_dir}/")
         click.echo(f"     • transcript.txt")
         click.echo(f"     • report.md")
-        click.echo(f"     • report.pdf")
+        if pdf:
+            click.echo(f"     • report.pdf")
         logger.info("Processing complete (summary)")
 
     except KeyboardInterrupt:
@@ -441,7 +495,13 @@ def summarize(
     "--openai-model",
     type=str,
     default="gpt-6-luna",
+    show_default=True,
     help="OpenAI model to use for report generation",
+)
+@click.option(
+    "--pdf",
+    is_flag=True,
+    help="Also save the report as PDF",
 )
 @click.option(
     "--prompt",
@@ -458,6 +518,7 @@ def report_command(
     transcript_file: Path,
     openai_model: str,
     prompt: str | None,
+    pdf: bool,
     debug: bool,
 ) -> None:
     """Generate a report from an existing transcript file.
@@ -511,48 +572,15 @@ def report_command(
         sys.exit(1)
 
     logger.info("✓ All inputs validated")
-    click.echo(f"Reading transcript from: {transcript_file}")
 
     try:
-        # Read the transcript
-        logger.info(f"Reading transcript from: {transcript_file}")
-        transcript = transcript_file.read_text(encoding='utf-8')
-        click.echo(f"✓ Transcript loaded ({len(transcript)} characters)")
-        logger.info(f"Transcript loaded: {len(transcript)} characters")
-
-        # Generate report
-        click.echo(f"Generating report using {openai_model}...")
-        logger.info(f"Generating report with OpenAI model: {openai_model}")
-
-        # Read custom prompt if provided
-        custom_prompt = None
-        if prompt:
-            prompt_path = Path(prompt)
-            if prompt_path.exists() and prompt_path.is_file():
-                # It's a file path - read from file
-                custom_prompt = prompt_path.read_text(encoding='utf-8')
-                logger.info(f"Using custom prompt from file: {prompt_path}")
-                click.echo(f"✓ Using custom prompt from file: {prompt_path}")
-            else:
-                # It's a direct string prompt
-                custom_prompt = prompt
-                logger.info(f"Using custom prompt string ({len(custom_prompt)} characters)")
-                click.echo(f"✓ Using custom prompt string")
-
-        report = generate_report(transcript, api_key, model=openai_model, prompt=custom_prompt)
-        click.echo("✓ Report generated")
-        logger.info("Report generated")
-
-        # Save report as Markdown and PDF to the same directory
-        md_path, pdf_path = save_report(report, output_dir)
-        click.echo(f"✓ Report saved to: {md_path}")
-        click.echo(f"✓ Report saved to: {pdf_path}")
-        logger.info(f"Reports saved to: {md_path}, {pdf_path}")
+        _generate_and_save_report(transcript_file, output_dir, openai_model, api_key, prompt, pdf)
 
         click.echo(f"\n✓ All done! Files saved to:")
         click.echo(f"  📁 {output_dir}/")
         click.echo(f"     • report.md")
-        click.echo(f"     • report.pdf")
+        if pdf:
+            click.echo(f"     • report.pdf")
         logger.info("Report generation complete")
 
     except KeyboardInterrupt:
