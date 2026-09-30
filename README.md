@@ -18,19 +18,19 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 
 ### macOS
 
-1. Install system dependencies (required for PDF generation):
+1. Install system dependencies (Cairo, Pango, GDK-PixBuf and libffi are only needed for `--pdf`):
    ```bash
    brew install cairo pango gdk-pixbuf libffi ffmpeg
    ```
 
-2. Set library path (add to your `~/.zshrc` or `~/.bash_profile`):
+2. For PDF output, set the library path (add to your `~/.zshrc` or `~/.bash_profile`):
    ```bash
    export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
    ```
 
 3. Install Python dependencies using `uv` (or your preferred package manager):
    ```bash
-   uv sync
+   uv sync --extra pdf   # or just `uv sync` if you don't need PDF reports
    ```
 
 4. Set up your OpenAI API key:
@@ -41,7 +41,7 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 
 ### Linux
 
-1. Install system dependencies:
+1. Install system dependencies (everything except `ffmpeg` is only needed for `--pdf`):
    ```bash
    # Debian/Ubuntu
    sudo apt-get install libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev ffmpeg
@@ -52,13 +52,21 @@ A command-line tool to transcribe YouTube videos and generate AI-powered reports
 
 2. Install Python dependencies:
    ```bash
-   uv sync
+   uv sync --extra pdf   # or just `uv sync` if you don't need PDF reports
    ```
 
 3. Set up your OpenAI API key:
    ```bash
    echo "OPENAI_API_KEY=your-api-key-here" > .env
    ```
+
+### Install `ytt` globally (optional)
+
+To run `ytt` from any directory without `uv run`:
+
+```bash
+uv tool install --editable '.[pdf]'
+```
 
 ## Usage
 
@@ -70,7 +78,9 @@ Download and transcribe a YouTube video to text only (no AI summary):
 ytt transcribe https://youtube.com/watch?v=VIDEO_ID
 ```
 
-This creates: `output/YYYY-MM-DD/Video_Title/transcript.txt`
+This creates: `output/YYYY-MM-DD/Video_Title_VIDEOID/transcript.txt`
+
+Accepted URLs include `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `/embed/…` and `/live/…` links (including `m.` and `music.` hosts).
 
 **No OpenAI API key required** for transcription.
 
@@ -79,7 +89,7 @@ This creates: `output/YYYY-MM-DD/Video_Title/transcript.txt`
 - `--output-dir`, `-o`: Base directory for output files (default: `output_dir` from config, else `./output`)
 - `--model`, `-m`: Whisper model size - `tiny`, `base`, `small`, `medium`, `large` (default: `base`)
 - `--device`, `-d`: Device to use - `cpu` or `cuda` (default: `cpu`)
-- `--keep-audio`: Keep temporary audio file after processing (for debugging)
+- `--keep-audio`: Save the downloaded audio as `audio.mp3` in the output folder
 - `--debug`: Enable debug logging (shows detailed processing info)
 
 #### Examples
@@ -106,7 +116,7 @@ Generate an AI-powered summary report (transcribes first if needed):
 ytt summarize https://youtube.com/watch?v=VIDEO_ID
 ```
 
-**Intelligent transcript reuse:** If a transcript already exists in the output directory, it will be reused without re-transcribing. Otherwise, the video will be downloaded and transcribed first.
+**Intelligent transcript reuse:** If this video was transcribed before (on any date), its existing folder and transcript are reused without re-transcribing. Otherwise, the video will be downloaded and transcribed first.
 
 This creates:
 - `transcript.txt` (if not already present)
@@ -121,9 +131,10 @@ This creates:
 - `--output-dir`, `-o`: Base directory for output files (default: `output_dir` from config, else `./output`)
 - `--model`, `-m`: Whisper model size (default: `base`) - only used if transcription is needed
 - `--device`, `-d`: Device: `cpu` or `cuda` (default: `cpu`) - only used if transcription is needed
-- `--keep-audio`: Keep audio file - only used if transcription is needed
+- `--keep-audio`: Save the downloaded audio in the output folder - only used if transcription is needed
 - `--openai-model`: OpenAI model to use (default: `openai_model` from config, else `gpt-6-luna`)
-- `--prompt`: Custom summary prompt (file path or string)
+- `--prompt`: Custom summary prompt text
+- `--prompt-file`: Read the custom summary prompt from a file
 - `--pdf`: Also save the report as `report.pdf`
 - `--debug`: Enable debug logging
 
@@ -137,7 +148,7 @@ ytt summarize https://www.youtube.com/watch?v=VIDEO_ID
 ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --openai-model gpt-5
 
 # With custom prompt from file
-ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --prompt prompt.txt
+ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --prompt-file prompt.txt
 
 # With custom prompt as string
 ytt summarize https://www.youtube.com/watch?v=VIDEO_ID --prompt "Summarize this video focusing on technical details"
@@ -166,7 +177,8 @@ This is useful when you:
 #### Options
 
 - `--openai-model`: OpenAI model to use (default: `openai_model` from config, else `gpt-6-luna`)
-- `--prompt`: Custom summary prompt (file path or string)
+- `--prompt`: Custom summary prompt text
+- `--prompt-file`: Read the custom summary prompt from a file
 - `--pdf`: Also save the report as `report.pdf`
 - `--debug`: Enable debug logging
 
@@ -174,16 +186,16 @@ This is useful when you:
 
 ```bash
 # Generate report from existing transcript
-ytt report output/2025-11-05/Video_Title/transcript.txt
+ytt report output/2025-11-05/Video_Title_VIDEOID/transcript.txt
 
 # Use a different OpenAI model
-ytt report output/2025-11-05/Video_Title/transcript.txt --openai-model gpt-5
+ytt report output/2025-11-05/Video_Title_VIDEOID/transcript.txt --openai-model gpt-5
 
 # With custom prompt
-ytt report output/2025-11-05/Video_Title/transcript.txt --prompt "Focus on key takeaways"
+ytt report output/2025-11-05/Video_Title_VIDEOID/transcript.txt --prompt "Focus on key takeaways"
 
 # With debug logging
-ytt report output/2025-11-05/Video_Title/transcript.txt --debug
+ytt report output/2025-11-05/Video_Title_VIDEOID/transcript.txt --debug
 ```
 
 The report (`report.md`, plus `report.pdf` with `--pdf`) will be saved in the same directory as the transcript file.
@@ -214,7 +226,7 @@ Files are organized by date and video title:
 ```
 output/
 └── YYYY-MM-DD/              # Date of processing
-    └── Video_Title/         # Sanitized video title
+    └── Video_Title_VIDEOID/ # Sanitized title + YouTube video ID
         ├── transcript.txt   # Raw transcription
         ├── report.md        # AI-generated report (Markdown) - only with summarize
         ├── report.pdf       # Report as PDF - only with --pdf
@@ -231,7 +243,7 @@ output/
 ```
 output/
 └── 2024-11-05/
-    └── My_YouTube_Video/
+    └── My_YouTube_Video_dQw4w9WgXcQ/
         ├── transcript.txt
         ├── report.md
         ├── report.pdf
@@ -249,6 +261,7 @@ output/
 
 ## Notes
 
+- Run the tests with `uv run pytest` (no network access or API key needed)
 - The first time you run the tool, faster-whisper will download the model files (this may take a few minutes)
 - Larger Whisper models provide better accuracy but are slower
 - GPU acceleration (CUDA) requires appropriate hardware and drivers
