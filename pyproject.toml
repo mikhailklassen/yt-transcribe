@@ -9,7 +9,7 @@ description = "YouTube video transcription and AI-powered report generation tool
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "yt-dlp>=2026.3.3",
+    "yt-dlp>=2026.8.19",
     "faster-whisper>=1.0.0",
     "openai>=1.0.0",
     "click>=8.1.0",

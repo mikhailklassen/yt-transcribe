@@ -46,6 +46,7 @@ Format as Markdown. Use formatting (bold, italic, bullets) for readability. Avoi
 
 # Model context window limits (total tokens: input + output)
 MODEL_CONTEXT_LIMITS = {
+    "gpt-6-luna": 1050000,
     "gpt-4": 8192,
     "gpt-4.1": 128000,
     "gpt-4-turbo": 128000,
@@ -99,7 +100,7 @@ def _calculate_max_completion_tokens(
     return max_completion
 
 
-def generate_report(transcript: str, api_key: str, model: str = "gpt-5-mini", prompt: str | None = None) -> str:
+def generate_report(transcript: str, api_key: str, model: str = "gpt-6-luna", prompt: str | None = None) -> str:
     """Generate a report from a transcript using OpenAI.
     
     Args:

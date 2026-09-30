@@ -12,6 +12,7 @@ VALID_WHISPER_MODELS = ["tiny", "base", "small", "medium", "large", "large-v2", 
 
 # Valid OpenAI models (common ones)
 VALID_OPENAI_MODELS = [
+    "gpt-6-luna",
     "gpt-5",
     "gpt-5-mini",
     "gpt-5-nano",

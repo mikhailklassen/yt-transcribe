@@ -121,7 +121,7 @@ This creates:
 - `--model`, `-m`: Whisper model size (default: `base`) - only used if transcription is needed
 - `--device`, `-d`: Device: `cpu` or `cuda` (default: `cpu`) - only used if transcription is needed
 - `--keep-audio`: Keep audio file - only used if transcription is needed
-- `--openai-model`: OpenAI model to use (default: `gpt-5-mini`)
+- `--openai-model`: OpenAI model to use (default: `gpt-6-luna`)
 - `--prompt`: Custom summary prompt (file path or string)
 - `--debug`: Enable debug logging
 
@@ -160,7 +160,7 @@ This is useful when you:
 
 #### Options
 
-- `--openai-model`: OpenAI model to use (default: `gpt-5-mini`)
+- `--openai-model`: OpenAI model to use (default: `gpt-6-luna`)
 - `--prompt`: Custom summary prompt (file path or string)
 - `--debug`: Enable debug logging
 

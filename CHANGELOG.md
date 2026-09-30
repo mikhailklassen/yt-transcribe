@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Default OpenAI model for `summarize` and `report` is now `gpt-6-luna` (1,050,000-token context window)
+
+### Fixed
+- Upgrade yt-dlp to 2026.8.19 to resolve YouTube 403 download errors
+
 ### Added
 - **New `report` command** to generate reports from existing transcript files
   - Allows regenerating reports without re-transcribing

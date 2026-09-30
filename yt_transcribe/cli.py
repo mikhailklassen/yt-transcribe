@@ -325,7 +325,7 @@ def transcribe(
 @click.option(
     "--openai-model",
     type=str,
-    default="gpt-5-mini",
+    default="gpt-6-luna",
     help="OpenAI model to use for report generation",
 )
 @click.option(
@@ -440,7 +440,7 @@ def summarize(
 @click.option(
     "--openai-model",
     type=str,
-    default="gpt-5-mini",
+    default="gpt-6-luna",
     help="OpenAI model to use for report generation",
 )
 @click.option(
