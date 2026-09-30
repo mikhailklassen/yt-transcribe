@@ -2,13 +2,9 @@
 
 import yt_dlp
 from pathlib import Path
-import tempfile
-import shutil
-import os
 import subprocess
 import json
 import logging
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +17,9 @@ def get_video_metadata(url: str) -> dict[str, str]:
         
     Returns:
         Dictionary with video metadata (title, id, duration, etc.)
+        
+    Raises:
+        RuntimeError: If metadata can't be fetched or has no video ID
     """
     logger.debug(f"Extracting metadata from: {url}")
     
@@ -30,57 +29,27 @@ def get_video_metadata(url: str) -> dict[str, str]:
         "extract_flat": False,
     }
     
+    # Fail loudly: the video ID names the output folder, so guessing here could
+    # mix up transcripts from different videos
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
-            metadata = {
-                "title": info.get("title", "Unknown"),
-                "id": info.get("id", "unknown"),
-                "duration": info.get("duration", 0),
-                "uploader": info.get("uploader", "Unknown"),
-                "upload_date": info.get("upload_date", ""),
-            }
-            
-            logger.info(f"Video metadata: '{metadata['title']}' by {metadata['uploader']}")
-            return metadata
-            
     except Exception as e:
-        logger.warning(f"Could not extract metadata: {e}")
-        # Return minimal metadata
-        return {
-            "title": "Unknown",
-            "id": "unknown",
-            "duration": 0,
-            "uploader": "Unknown",
-            "upload_date": "",
-        }
-
-
-def sanitize_title_for_folder(title: str, max_length: int = 50) -> str:
-    """Sanitize video title for use as a folder name.
+        raise RuntimeError(f"Could not fetch video metadata: {e}") from e
     
-    Args:
-        title: Video title
-        max_length: Maximum length for folder name
-        
-    Returns:
-        Sanitized folder name
-    """
-    # Remove or replace invalid characters for folder names
-    sanitized = re.sub(r'[<>:"/\\|?*]', '', title)
-    # Replace spaces and multiple whitespace with single underscores
-    sanitized = re.sub(r'\s+', '_', sanitized)
-    # Remove leading/trailing underscores and dots
-    sanitized = sanitized.strip('._')
-    # Truncate if too long
-    if len(sanitized) > max_length:
-        sanitized = sanitized[:max_length].rstrip('._')
-    # If empty after sanitization, use a default
-    if not sanitized:
-        sanitized = "video"
+    if not info or not info.get("id"):
+        raise RuntimeError("Could not fetch video metadata: no video ID returned")
     
-    return sanitized
+    metadata = {
+        "title": info.get("title") or info["id"],
+        "id": info["id"],
+        "duration": info.get("duration", 0),
+        "uploader": info.get("uploader") or "Unknown",
+        "upload_date": info.get("upload_date", ""),
+    }
+    
+    logger.info(f"Video metadata: '{metadata['title']}' by {metadata['uploader']} ({metadata['id']})")
+    return metadata
 
 
 def verify_ffmpeg() -> tuple[bool, str]:
@@ -177,7 +146,7 @@ def download_audio(url: str, output_dir: Path) -> Path:
     
     Args:
         url: YouTube video URL
-        output_dir: Directory to save the audio file
+        output_dir: Directory to save the audio file (normally a temp directory)
         
     Returns:
         Path to the downloaded audio file
@@ -193,29 +162,9 @@ def download_audio(url: str, output_dir: Path) -> Path:
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create a unique base name without extension
-    temp_file = tempfile.NamedTemporaryFile(
-        delete=False, suffix="", dir=output_dir, prefix="audio_"
-    )
-    base_path = temp_file.name
-    temp_file.close()
-    Path(base_path).unlink()  # Remove the empty file, let yt-dlp create it
-    
-    logger.debug(f"Temporary file base path: {base_path}")
-    
-    # Find ffmpeg/ffprobe in common locations
-    ffmpeg_path = shutil.which("ffmpeg")
-    
-    # Try Homebrew location if not in PATH
-    if not ffmpeg_path:
-        homebrew_ffmpeg = "/opt/homebrew/bin/ffmpeg"
-        if Path(homebrew_ffmpeg).exists():
-            ffmpeg_path = homebrew_ffmpeg
-            logger.debug(f"Using Homebrew FFmpeg: {ffmpeg_path}")
-    
     ydl_opts = {
         "format": "bestaudio/best",
-        "outtmpl": base_path + ".%(ext)s",  # Let yt-dlp add the extension
+        "outtmpl": str(output_dir / "audio.%(ext)s"),
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -223,14 +172,9 @@ def download_audio(url: str, output_dir: Path) -> Path:
                 "preferredquality": "192",
             }
         ],
-        "quiet": False,  # Changed: Allow errors to surface
-        "no_warnings": False,  # Changed: Show warnings
+        "quiet": False,  # Show download progress and errors
+        "no_warnings": False,
     }
-    
-    # Set ffmpeg paths if found
-    if ffmpeg_path:
-        ydl_opts["ffmpeg_location"] = str(Path(ffmpeg_path).parent)
-        logger.debug(f"Set ffmpeg_location to: {Path(ffmpeg_path).parent}")
     
     # Download the audio
     logger.info(f"Starting download from: {url}")
@@ -239,24 +183,21 @@ def download_audio(url: str, output_dir: Path) -> Path:
             ydl.download([url])
     except Exception as e:
         logger.error(f"yt-dlp download failed: {e}")
-        raise RuntimeError(f"Failed to download audio: {e}")
+        raise RuntimeError(f"Failed to download audio: {e}") from e
     
     # Find the downloaded file (should be .mp3 after postprocessing)
-    audio_path = Path(base_path + ".mp3")
+    audio_path = output_dir / "audio.mp3"
     
-    # Check if file exists and has content
     if not audio_path.exists():
-        # Try to find any file with the base name
-        possible_files = list(output_dir.glob(f"{Path(base_path).name}.*"))
-        if possible_files:
-            audio_path = possible_files[0]
-            logger.debug(f"Found alternative file: {audio_path}")
-        else:
-            logger.error(f"No downloaded files found for base path: {base_path}")
+        possible_files = [f for f in output_dir.glob("audio.*") if f.suffix != ".part"]
+        if not possible_files:
+            logger.error(f"No downloaded files found in: {output_dir}")
             raise RuntimeError(
                 f"Failed to download audio from {url}\n"
                 "No output files were created. Check your internet connection."
             )
+        audio_path = possible_files[0]
+        logger.debug(f"Found alternative file: {audio_path}")
     
     # Validate the downloaded file
     logger.debug(f"Validating downloaded file: {audio_path}")
@@ -273,4 +214,3 @@ def download_audio(url: str, output_dir: Path) -> Path:
     
     logger.info(f"Successfully downloaded and validated: {audio_path}")
     return audio_path
-

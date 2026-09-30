@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 from typing import Tuple
+from urllib.parse import urlparse, parse_qs
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,52 @@ VALID_OPENAI_MODELS = [
     "gpt-3.5-turbo-16k",
 ]
 
+YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"}
+SHORT_LINK_HOSTS = {"youtu.be", "www.youtu.be"}
+# Path prefixes that are followed by the video ID, e.g. /shorts/<id>
+ID_PATH_PREFIXES = ("shorts", "embed", "v", "live")
+VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
+
+# Model families accepted by --openai-model; the API rejects anything that doesn't exist
+OPENAI_MODEL_RE = re.compile(r"^(gpt-|chatgpt-|o\d|ft:)[\w.:-]*$")
+
+
+def extract_video_id(url: str) -> str | None:
+    """Extract the video ID from a YouTube URL.
+    
+    Accepts youtube.com (www, m, music) watch/shorts/embed/v/live URLs and
+    youtu.be short links, with or without a scheme.
+    
+    Args:
+        url: URL to parse
+        
+    Returns:
+        11-character video ID, or None if this isn't a YouTube video URL
+    """
+    url = url.strip()
+    if "://" not in url:
+        url = "https://" + url
+    
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    
+    host = (parsed.hostname or "").lower()
+    path_parts = [part for part in parsed.path.split("/") if part]
+    
+    candidate = None
+    if host in SHORT_LINK_HOSTS and path_parts:
+        candidate = path_parts[0]
+    elif host in YOUTUBE_HOSTS:
+        if path_parts == ["watch"]:
+            candidate = parse_qs(parsed.query).get("v", [None])[0]
+        elif len(path_parts) >= 2 and path_parts[0] in ID_PATH_PREFIXES:
+            candidate = path_parts[1]
+    
+    if candidate and VIDEO_ID_RE.fullmatch(candidate):
+        return candidate
+    return None
+
 
 def validate_youtube_url(url: str) -> Tuple[bool, str, str | None]:
     """Validate YouTube URL and extract video ID.
@@ -41,25 +88,16 @@ def validate_youtube_url(url: str) -> Tuple[bool, str, str | None]:
     if not url or not isinstance(url, str):
         return False, "URL must be a non-empty string", None
     
-    # YouTube URL patterns
-    patterns = [
-        r'(?:https?://)?(?:www\.)?youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})',
-        r'(?:https?://)?(?:www\.)?youtu\.be/([a-zA-Z0-9_-]{11})',
-        r'(?:https?://)?(?:www\.)?youtube\.com/embed/([a-zA-Z0-9_-]{11})',
-        r'(?:https?://)?(?:www\.)?youtube\.com/v/([a-zA-Z0-9_-]{11})',
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            video_id = match.group(1)
-            logger.debug(f"Valid YouTube URL: {url}, Video ID: {video_id}")
-            return True, "Valid YouTube URL", video_id
+    video_id = extract_video_id(url)
+    if video_id:
+        logger.debug(f"Valid YouTube URL: {url}, Video ID: {video_id}")
+        return True, "Valid YouTube URL", video_id
     
     return False, (
         "Invalid YouTube URL format. Expected formats:\n"
         "  - https://www.youtube.com/watch?v=VIDEO_ID\n"
         "  - https://youtu.be/VIDEO_ID\n"
+        "  - https://www.youtube.com/shorts/VIDEO_ID\n"
         "  - https://www.youtube.com/embed/VIDEO_ID"
     ), None
 
@@ -104,15 +142,15 @@ def validate_openai_model(model: str) -> Tuple[bool, str]:
     if not model or not isinstance(model, str):
         return False, "Model must be a non-empty string"
     
-    # Allow any model that starts with gpt- for forward compatibility
-    if model.startswith("gpt-") or model.startswith("o1"):
+    # Accept whole model families for forward compatibility (gpt-*, o3, o4-mini, ...)
+    if OPENAI_MODEL_RE.match(model):
         logger.debug(f"OpenAI model looks valid: {model}")
         return True, f"OpenAI model: {model}"
     
     return False, (
         f"Invalid OpenAI model: '{model}'\n"
         f"Common models: {', '.join(VALID_OPENAI_MODELS[:3])}\n"
-        "Model must start with 'gpt-' or 'o1'"
+        "Model must start with 'gpt-', 'chatgpt-', 'o<digit>' (e.g. o3, o4-mini) or 'ft:'"
     )
 
 
@@ -233,7 +271,7 @@ def validate_all_inputs(
     if all_valid:
         logger.info("All inputs validated successfully")
     else:
-        logger.error(f"Input validation failed: {len(errors)} error(s)")
+        logger.info(f"Input validation failed: {len(errors)} error(s)")
 
     return all_valid, errors
 

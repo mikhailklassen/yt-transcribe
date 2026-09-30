@@ -9,23 +9,72 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_output_directory(base_dir: Path, video_title: str) -> Path:
-    """Create organized output directory structure.
+def sanitize_title_for_folder(title: str, max_length: int = 50) -> str:
+    """Sanitize video title for use as a folder name.
     
-    Creates: base_dir/YYYY-MM-DD/video_title/
+    Args:
+        title: Video title
+        max_length: Maximum length for folder name
+        
+    Returns:
+        Sanitized folder name
+    """
+    # Remove or replace invalid characters for folder names
+    sanitized = re.sub(r'[<>:"/\\|?*]', '', title)
+    # Replace spaces and multiple whitespace with single underscores
+    sanitized = re.sub(r'\s+', '_', sanitized)
+    # Remove leading/trailing underscores and dots
+    sanitized = sanitized.strip('._')
+    # Truncate if too long
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length].rstrip('._')
+    # If empty after sanitization, use a default
+    if not sanitized:
+        sanitized = "video"
+    
+    return sanitized
+
+
+def find_output_directory(base_dir: Path, video_id: str) -> Path | None:
+    """Find an existing output directory for a video, from any date.
+    
+    Args:
+        base_dir: Base output directory
+        video_id: YouTube video ID
+        
+    Returns:
+        Most recent matching directory, or None if the video hasn't been processed
+    """
+    # Folder names end in "_<video_id>"; IDs are [A-Za-z0-9_-], so no glob escaping needed
+    matches = [path for path in base_dir.glob(f"*/*_{video_id}") if path.is_dir()]
+    if not matches:
+        return None
+    # Date folders are YYYY-MM-DD, so the lexically greatest is the most recent
+    return max(matches, key=lambda path: path.parent.name)
+
+
+def create_output_directory(base_dir: Path, video_title: str, video_id: str) -> Path:
+    """Return the output directory for a video, creating it if needed.
+    
+    Reuses the video's existing directory if there is one (so transcripts are
+    found again on later days); otherwise creates base_dir/YYYY-MM-DD/Title_ID/.
     
     Args:
         base_dir: Base output directory (e.g., "output")
-        video_title: Sanitized video title for folder name
+        video_title: Video title (sanitized here for the folder name)
+        video_id: YouTube video ID, which keeps same-titled videos apart
         
     Returns:
         Path to the video-specific output directory
     """
-    # Get current date for folder organization
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    existing = find_output_directory(base_dir, video_id)
+    if existing:
+        logger.info(f"Using existing output directory: {existing}")
+        return existing
     
-    # Create the full path: output/YYYY-MM-DD/video_title/
-    output_path = base_dir / date_str / video_title
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    folder_name = f"{sanitize_title_for_folder(video_title)}_{video_id}"
+    output_path = base_dir / date_str / folder_name
     
     logger.debug(f"Creating output directory: {output_path}")
     output_path.mkdir(parents=True, exist_ok=True)
@@ -34,42 +83,39 @@ def create_output_directory(base_dir: Path, video_title: str) -> Path:
     return output_path
 
 
-def sanitize_filename(text: str, max_length: int = 100) -> str:
-    """Sanitize a string to be used as a filename.
+def check_pdf_support() -> tuple[bool, str]:
+    """Check that WeasyPrint (the optional PDF dependency) can be loaded.
     
-    Args:
-        text: Text to sanitize
-        max_length: Maximum length of the filename
-        
     Returns:
-        Sanitized filename
+        Tuple of (available, message)
     """
-    # Remove or replace invalid characters
-    text = re.sub(r'[<>:"/\\|?*]', '', text)
-    text = re.sub(r'\s+', '_', text)
-    text = text.strip('._')
-    
-    # Truncate if too long
-    if len(text) > max_length:
-        text = text[:max_length]
-    
-    return text or "video"
+    try:
+        import weasyprint  # noqa: F401
+    except ImportError:
+        return False, (
+            "PDF support is not installed. Install it with:\n"
+            "  uv sync --extra pdf              (from the repo)\n"
+            "  uv tool install --editable '.[pdf]'   (global ytt)"
+        )
+    except OSError as e:
+        return False, (
+            f"PDF libraries could not be loaded: {e}\n"
+            "Install Cairo and Pango (see README). On macOS, also set "
+            "DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib"
+        )
+    return True, "PDF support available"
 
 
-def get_video_title(url: str) -> str:
-    """Extract a simple title from URL or use a default.
+def _refuse_url_fetch(url: str, *args, **kwargs) -> dict:
+    """WeasyPrint URL fetcher that blocks every request.
     
-    Args:
-        url: YouTube URL
-        
-    Returns:
-        A title string
+    The report is LLM output derived from untrusted video audio, so any HTML it
+    contains must not be able to pull local files or remote URLs into the PDF.
+    
+    Raises:
+        ValueError: Always
     """
-    # Try to extract video ID
-    video_id_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', url)
-    if video_id_match:
-        return f"video_{video_id_match.group(1)}"
-    return "video"
+    raise ValueError(f"Blocked external resource in report: {url}")
 
 
 def save_transcript(transcript: str, output_dir: Path) -> Path:
@@ -118,7 +164,7 @@ def save_report(report: str, output_dir: Path, pdf: bool = False) -> tuple[Path,
         logger.info(f"Report saved: {md_path}")
         return md_path, None
     
-    # Imported lazily: WeasyPrint is slow to load and needs system libraries
+    # Imported lazily: WeasyPrint is optional, slow to load and needs system libraries
     from weasyprint import HTML
     
     # Convert Markdown to HTML and then to PDF
@@ -161,7 +207,6 @@ def save_report(report: str, output_dir: Path, pdf: bool = False) -> tuple[Path,
             background-color: #f4f4f4;
             padding: 15px;
             border-radius: 5px;
-            overflow-x: auto;
         }}
         ul, ol {{
             margin-left: 20px;
@@ -179,7 +224,7 @@ def save_report(report: str, output_dir: Path, pdf: bool = False) -> tuple[Path,
     # Save PDF
     pdf_path = output_dir / "report.pdf"
     logger.debug(f"Generating PDF: {pdf_path}")
-    HTML(string=full_html).write_pdf(pdf_path)
+    HTML(string=full_html, url_fetcher=_refuse_url_fetch).write_pdf(pdf_path)
     
     logger.info(f"Reports saved: {md_path}, {pdf_path}")
     

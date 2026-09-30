@@ -15,9 +15,13 @@ dependencies = [
     "click>=8.1.0",
     "python-dotenv>=1.0.0",
     "markdown>=3.5.0",
-    "weasyprint>=60.0",
-    "pydub>=0.25.0",
     "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# PDF reports (--pdf); needs Cairo/Pango system libraries
+pdf = [
+    "weasyprint>=60.0",
 ]
 
 [project.scripts]
@@ -25,3 +29,8 @@ ytt = "yt_transcribe.cli:cli"
 
 [tool.setuptools]
 packages = ["yt_transcribe"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
